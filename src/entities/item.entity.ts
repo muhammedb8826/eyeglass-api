@@ -16,6 +16,9 @@ export class Item {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ nullable: true, unique: true })
+  itemCode: string;
+
   @Column({ unique: true })
   name: string;
 
@@ -57,6 +60,16 @@ export class Item {
 
   @Column({ nullable: true })
   purchaseUomId: string;
+
+  // Lens-blank specific metadata
+  @Column({ nullable: true })
+  lensMaterial: string;
+
+  @Column('float', { nullable: true })
+  lensIndex: number;
+
+  @Column({ nullable: true })
+  lensType: string;
 
   @OneToMany(() => Attribute, attribute => attribute.items)
   attributes: Attribute[];

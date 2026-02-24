@@ -1,6 +1,10 @@
 import { IsBoolean, IsInt, IsOptional, IsString } from "class-validator";
 
 export class CreateItemDto {
+    @IsOptional()
+    @IsString()
+    itemCode?: string;
+
     @IsString()
     name: string;
 

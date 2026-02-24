@@ -33,6 +33,67 @@ export class OrderItems {
   @Column('float', { nullable: true })
   height: number;
 
+  // Eyeglass lens prescription (per-eye) and common lens parameters
+  @Column('float', { nullable: true })
+  sphereRight: number;
+
+  @Column('float', { nullable: true })
+  sphereLeft: number;
+
+  @Column('float', { nullable: true })
+  cylinderRight: number;
+
+  @Column('float', { nullable: true })
+  cylinderLeft: number;
+
+  @Column('float', { nullable: true })
+  axisRight: number;
+
+  @Column('float', { nullable: true })
+  axisLeft: number;
+
+  @Column('float', { nullable: true })
+  prismRight: number;
+
+  @Column('float', { nullable: true })
+  prismLeft: number;
+
+  @Column('float', { nullable: true })
+  addRight: number;
+
+  @Column('float', { nullable: true })
+  addLeft: number;
+
+  @Column('float', { nullable: true })
+  pd: number;
+
+  @Column('float', { nullable: true })
+  pdMonocularRight: number;
+
+  @Column('float', { nullable: true })
+  pdMonocularLeft: number;
+
+  @Column({ nullable: true })
+  lensType: string;
+
+  @Column({ nullable: true })
+  lensMaterial: string;
+
+  @Column({ nullable: true })
+  lensCoating: string;
+
+  @Column('float', { nullable: true })
+  lensIndex: number;
+
+  @Column('float', { nullable: true })
+  baseCurve: number;
+
+  @Column('float', { nullable: true })
+  diameter: number;
+
+  @Column({ nullable: true })
+  tintColor: string;
+
   @Column('float', { nullable: true })
   discount: number;
 

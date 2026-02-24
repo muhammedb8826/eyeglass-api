@@ -40,6 +40,16 @@ export class Order {
   @Column({ nullable: true })
   internalNote: string;
 
+  // Eyeglass lens order metadata
+  @Column({ type: 'timestamp', nullable: true })
+  prescriptionDate: Date;
+
+  @Column({ nullable: true })
+  optometristName: string;
+
+  @Column({ nullable: true })
+  urgency: string;
+
   @Column({ nullable: true })
   paymentTermId: string;
 

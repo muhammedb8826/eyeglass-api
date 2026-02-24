@@ -1,6 +1,10 @@
 import { User } from './entities/user.entity';
 import { FixedCost } from './entities/fixed-cost.entity';
 import { Role } from './enums/role.enum';
+import { UnitCategory } from './entities/unit-category.entity';
+import { UOM } from './entities/uom.entity';
+import { Item } from './entities/item.entity';
+import { Machine } from './entities/machine.entity';
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from './config/database.config';
@@ -19,6 +23,10 @@ async function seed() {
 
     const userRepository = AppDataSource.getRepository(User);
     const fixedCostRepository = AppDataSource.getRepository(FixedCost);
+    const unitCategoryRepository = AppDataSource.getRepository(UnitCategory);
+    const uomRepository = AppDataSource.getRepository(UOM);
+    const itemRepository = AppDataSource.getRepository(Item);
+    const machineRepository = AppDataSource.getRepository(Machine);
 
     // Seed Admin User
     const adminData = {
@@ -103,9 +111,124 @@ async function seed() {
         console.log(`Fixed cost "${fixedCostData.description}" already exists`);
       }
     }
-    console.log(adminData);
-    console.log(existingUser);
-    console.log(fixedCostsData);
+
+    // Seed basic machine
+    let defaultMachine = await machineRepository.findOne({
+      where: { name: 'Default Machine' },
+    });
+    if (!defaultMachine) {
+      defaultMachine = await machineRepository.save({
+        name: 'Default Machine',
+        status: true,
+        description: 'Default production machine for lens items',
+      });
+      console.log('Default machine created');
+    } else {
+      console.log('Default machine already exists');
+    }
+
+    // Seed unit category for countable pieces
+    let pieceCategory = await unitCategoryRepository.findOne({
+      where: { name: 'Piece' },
+    });
+    if (!pieceCategory) {
+      pieceCategory = await unitCategoryRepository.save({
+        name: 'Piece',
+        description: 'Countable items (pcs)',
+        constant: false,
+        constantValue: 1,
+      });
+      console.log('Unit category "Piece" created');
+    } else {
+      console.log('Unit category "Piece" already exists');
+    }
+
+    // Seed UOM "pcs"
+    let pcsUom = await uomRepository.findOne({
+      where: {
+        name: 'Piece',
+        abbreviation: 'pcs',
+        unitCategoryId: pieceCategory.id,
+      },
+    });
+    if (!pcsUom) {
+      pcsUom = await uomRepository.save({
+        name: 'Piece',
+        abbreviation: 'pcs',
+        conversionRate: 1,
+        baseUnit: true,
+        unitCategoryId: pieceCategory.id,
+      });
+      console.log('UOM "Piece (pcs)" created');
+    } else {
+      console.log('UOM "Piece (pcs)" already exists');
+    }
+
+    // Seed basic lens items with itemCode
+    const lensItemsData = [
+      {
+        itemCode: '1113',
+        name: 'SV Glass white',
+        lensType: 'SINGLE_VISION',
+        lensMaterial: 'GLASS',
+        lensIndex: 1.5,
+      },
+      {
+        itemCode: '1123',
+        name: 'SV Glass photosolar',
+        lensType: 'SINGLE_VISION',
+        lensMaterial: 'GLASS_PHOTOSOLAR',
+        lensIndex: 1.5,
+      },
+      {
+        itemCode: '3425',
+        name: 'Polarized Progressive',
+        lensType: 'PROGRESSIVE',
+        lensMaterial: 'POLARIZED',
+        lensIndex: 1.6,
+      },
+      {
+        itemCode: '4000',
+        name: 'Finished Lens',
+        lensType: 'FINISHED',
+        lensMaterial: 'PLASTIC',
+        lensIndex: 1.5,
+      },
+    ];
+
+    for (const lensItem of lensItemsData) {
+      const existingItem = await itemRepository.findOne({
+        where: [
+          { itemCode: lensItem.itemCode },
+          { name: lensItem.name },
+        ],
+      });
+
+      if (!existingItem) {
+        await itemRepository.save({
+          itemCode: lensItem.itemCode,
+          name: lensItem.name,
+          description: lensItem.lensType,
+          reorder_level: 50,
+          initial_stock: 0,
+          updated_initial_stock: 0,
+          machineId: defaultMachine.id,
+          can_be_purchased: true,
+          can_be_sold: true,
+          quantity: 0,
+          unitCategoryId: pieceCategory.id,
+          defaultUomId: pcsUom.id,
+          purchaseUomId: pcsUom.id,
+          lensMaterial: lensItem.lensMaterial,
+          lensIndex: lensItem.lensIndex,
+          lensType: lensItem.lensType,
+        } as Item);
+        console.log(`Lens item "${lensItem.itemCode} - ${lensItem.name}" created`);
+      } else {
+        console.log(`Lens item "${lensItem.itemCode} - ${lensItem.name}" already exists`);
+      }
+    }
+
     console.log('Seeding completed successfully');
     await AppDataSource.destroy();
   } catch (error) {

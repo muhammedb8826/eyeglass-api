@@ -9,6 +9,9 @@ export class CreateOrderDto {
   customerId: string;
   status: string;
   orderDate: Date;
+  prescriptionDate?: Date;
+  optometristName?: string;
+  urgency?: string;
   orderSource: string;
   deliveryDate: Date;
   totalAmount: number;

@@ -24,6 +24,13 @@ export class Customer {
   @Column({ nullable: true })
   description: string;
 
+  // Patient-specific fields for eyeglass orders
+  @Column({ type: 'date', nullable: true })
+  dateOfBirth: Date;
+
+  @Column({ nullable: true })
+  gender: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

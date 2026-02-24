@@ -29,9 +29,14 @@ export class ItemsService {
       throw new ConflictException('Machine ID does not exist.');
     }
   
-    // Check if an item with the same name already exists
+    // Check if an item with the same name or code already exists
     const existingItem = await this.itemRepository.findOne({
-      where: { name: ILike(createItemDto.name) },
+      where: createItemDto.itemCode
+        ? [
+            { name: ILike(createItemDto.name) },
+            { itemCode: createItemDto.itemCode },
+          ]
+        : { name: ILike(createItemDto.name) },
     });
   
     if (existingItem) {
@@ -40,6 +45,7 @@ export class ItemsService {
 
     try {
       const item = this.itemRepository.create({
+        itemCode: createItemDto.itemCode,
         name: createItemDto.name,
         description: createItemDto.description || '',
         reorder_level: createItemDto.reorder_level || 0,
