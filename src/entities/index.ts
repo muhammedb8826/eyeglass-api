@@ -10,6 +10,7 @@ export * from './machine.entity';
 export * from './order-item-notes.entity';
 export * from './order-item.entity';
 export * from './order.entity';
+export * from './bincard.entity';
 export * from './operator-stock.entity';
 export * from './payment-term.entity';
 export * from './payment-transaction.entity';

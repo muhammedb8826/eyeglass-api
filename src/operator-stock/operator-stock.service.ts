@@ -4,20 +4,34 @@ import { Repository } from 'typeorm';
 import { CreateOperatorStockDto } from './dto/create-operator-stock.dto';
 import { UpdateOperatorStockDto } from './dto/update-operator-stock.dto';
 import { OperatorStock } from 'src/entities/operator-stock.entity';
-
+import { BincardService } from 'src/bincard/bincard.service';
 
 @Injectable()
 export class OperatorStockService {
   constructor(
     @InjectRepository(OperatorStock)
     private readonly operatorStockRepository: Repository<OperatorStock>,
+    private readonly bincardService: BincardService,
   ) {}
 
   async create(createOperatorStockDto: CreateOperatorStockDto) {
     // Create a new operator stock record
     const newOperatorStock = this.operatorStockRepository.create(createOperatorStockDto);
     const savedOperatorStock = await this.operatorStockRepository.save(newOperatorStock);
-    
+
+    const qty = Number(savedOperatorStock.quantity) || 0;
+    if (qty > 0) {
+      await this.bincardService.recordMovement({
+        itemId: savedOperatorStock.itemId,
+        movementType: 'IN',
+        quantity: qty,
+        balanceAfter: qty,
+        referenceType: 'OPENING',
+        description: 'Opening stock',
+        uomId: savedOperatorStock.uomId,
+      });
+    }
+
     // Return the created entity with relations
     return await this.operatorStockRepository.findOne({
       where: { id: savedOperatorStock.id },
@@ -58,7 +72,6 @@ export class OperatorStockService {
   }
 
   async update(id: string, updateOperatorStockDto: UpdateOperatorStockDto) {
-    // Check if the operator stock record exists
     const operatorStock = await this.operatorStockRepository.findOne({
       where: { id },
     });
@@ -67,10 +80,27 @@ export class OperatorStockService {
       throw new NotFoundException(`Operator Stock with ID ${id} not found`);
     }
 
-    // Update the operator stock record
+    const previousQuantity = Number(operatorStock.quantity) || 0;
+    const newQuantity =
+      updateOperatorStockDto.quantity !== undefined
+        ? Number(updateOperatorStockDto.quantity)
+        : previousQuantity;
+
     await this.operatorStockRepository.update(id, updateOperatorStockDto);
-    
-    // Return the updated entity with relations
+
+    if (newQuantity !== previousQuantity) {
+      const diff = newQuantity - previousQuantity;
+      await this.bincardService.recordMovement({
+        itemId: operatorStock.itemId,
+        movementType: diff > 0 ? 'IN' : 'OUT',
+        quantity: Math.abs(diff),
+        balanceAfter: newQuantity,
+        referenceType: 'ADJUSTMENT',
+        description: `Stock adjustment: ${previousQuantity} → ${newQuantity}`,
+        uomId: operatorStock.uomId,
+      });
+    }
+
     return await this.operatorStockRepository.findOne({
       where: { id },
       relations: ['item', 'uoms'],
@@ -125,23 +155,33 @@ export class OperatorStockService {
         );
       }
 
-      // Reduce the stock
       const newQuantity = operatorStock.quantity - quantityToReduce;
-      
+
       stockUpdates.push({
         id: operatorStock.id,
+        itemId: operatorStock.itemId,
+        uomId: operatorStock.uomId,
         quantity: newQuantity,
+        quantityMoved: quantityToReduce,
         description: `Stock reduced by ${quantityToReduce} due to order placement`,
-        status: newQuantity === 0 ? 'Out of Stock' : 'Available'
+        status: newQuantity === 0 ? 'Out of Stock' : 'Available',
       });
     }
 
-    // Update all stock records
     for (const update of stockUpdates) {
       await this.operatorStockRepository.update(update.id, {
         quantity: update.quantity,
         description: update.description,
-        status: update.status
+        status: update.status,
+      });
+      await this.bincardService.recordMovement({
+        itemId: update.itemId,
+        movementType: 'OUT',
+        quantity: update.quantityMoved,
+        balanceAfter: update.quantity,
+        referenceType: 'ORDER',
+        description: update.description,
+        uomId: update.uomId,
       });
     }
 
@@ -172,23 +212,33 @@ export class OperatorStockService {
       // Use unit as the quantity to restore (unit represents the total measurement amount)
       const quantityToRestore = parseFloat(orderItem.unit?.toString() || '0');
       
-      // Restore the stock
       const newQuantity = operatorStock.quantity + quantityToRestore;
-      
+
       stockUpdates.push({
         id: operatorStock.id,
+        itemId: operatorStock.itemId,
+        uomId: operatorStock.uomId,
         quantity: newQuantity,
+        quantityMoved: quantityToRestore,
         description: `Stock restored by ${quantityToRestore} due to order cancellation/update`,
-        status: 'Available'
+        status: 'Available',
       });
     }
 
-    // Update all stock records
     for (const update of stockUpdates) {
       await this.operatorStockRepository.update(update.id, {
         quantity: update.quantity,
         description: update.description,
-        status: update.status
+        status: update.status,
+      });
+      await this.bincardService.recordMovement({
+        itemId: update.itemId,
+        movementType: 'IN',
+        quantity: update.quantityMoved,
+        balanceAfter: update.quantity,
+        referenceType: 'ORDER',
+        description: update.description,
+        uomId: update.uomId,
       });
     }
 

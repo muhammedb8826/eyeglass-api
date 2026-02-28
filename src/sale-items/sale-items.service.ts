@@ -6,6 +6,8 @@ import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
 import { Item } from 'src/entities/item.entity';
 import { OperatorStock } from 'src/entities/operator-stock.entity';
+import { BincardService } from 'src/bincard/bincard.service';
+import type { RecordBincardMovementDto } from 'src/bincard/bincard.service';
 
 @Injectable()
 export class SaleItemsService {
@@ -16,6 +18,7 @@ export class SaleItemsService {
     private readonly itemRepository: Repository<Item>,
     @InjectRepository(OperatorStock)
     private readonly operatorStockRepository: Repository<OperatorStock>,
+    private readonly bincardService: BincardService,
   ) {}
 
   async create(createSaleItemDto: CreateSaleItemDto) {
@@ -59,116 +62,118 @@ export class SaleItemsService {
   }
 
   async update(id: string, updateSaleItemDto: UpdateSaleItemDto) {
-    // Start transaction to ensure consistency
-    return await this.saleItemRepository.manager.transaction(async (manager) => {
-      try {
-        // Fetch the sale item being updated
-        const saleItem = await manager.findOne(SaleItems, {
-          where: { id },
-          relations: ['item'],
-        });
+    let bincardMovement: RecordBincardMovementDto | null = null;
 
-        if (!saleItem) {
-          throw new NotFoundException(`Sale Item with ID ${id} not found`);
-        }
+    const result = await this.saleItemRepository.manager.transaction(async (manager) => {
+      const saleItem = await manager.findOne(SaleItems, {
+        where: { id },
+        relations: ['item'],
+      });
 
-        // Fetch the related item
-        const relatedItem = saleItem.item;
-
-        if (!relatedItem) {
-          throw new NotFoundException(`Related item not found for Sale Item with ID ${id}`);
-        }
-
-        if (updateSaleItemDto.status === 'Requested' && relatedItem.quantity < updateSaleItemDto.quantity) {
-          throw new ConflictException('Requested quantity is more than available quantity');
-        }
-
-        // Calculate the new quantity based on the status
-        let newQuantity = relatedItem.quantity;
-        if (updateSaleItemDto.status === 'Cancelled') {
-          newQuantity = relatedItem.quantity + saleItem.unit;
-
-          // Check if operator stock exists and reduce its quantity
-          const operatorStock = await manager.findOne(OperatorStock, {
-            where: { itemId: relatedItem.id, status: 'Active' },
-          });
-
-          if (operatorStock) {
-            // Decrement the operator stock quantity
-            await manager.update(OperatorStock, operatorStock.id, {
-              quantity: operatorStock.quantity - saleItem.unit,
-            });
-          }
-        } else if (updateSaleItemDto.status === 'Stocked-out') {
-          newQuantity = relatedItem.quantity - saleItem.unit;
-
-          // Check if operator stock exists
-          const operatorStock = await manager.findOne(OperatorStock, {
-            where: { itemId: relatedItem.id, status: 'Active' },
-          });
-
-          if (operatorStock) {
-            // Increment the operator stock quantity
-            await manager.update(OperatorStock, operatorStock.id, {
-              quantity: operatorStock.quantity + saleItem.unit,
-            });
-          } else {
-            // Create new operator stock if it doesn't exist
-            await manager.save(OperatorStock, {
-              itemId: relatedItem.id,
-              uomId: saleItem.uomId,
-              quantity: saleItem.unit,
-              description: `Stocked-out for Sale Item ${saleItem.id}`,
-              status: 'Active',
-              baseUomId: saleItem.baseUomId,
-              unit: saleItem.unit,
-            });
-          }
-          
-          // this.scheduleStatusChange(id, 24 * 60 * 60 * 1000);
-        }
-
-        // Ensure that quantity cannot drop below zero
-        if (newQuantity < 0) {
-          throw new ConflictException(`Quantity cannot drop below zero for Sale Item with ID ${id}`);
-        }
-
-        // Update the related item with the new quantity
-        await manager.update(Item, relatedItem.id, { quantity: newQuantity });
-
-        // Update the sale item
-        const updatedSaleItem = await manager.save(SaleItems, {
-          id,
-          quantity: parseFloat(updateSaleItemDto.quantity.toString()),
-          description: updateSaleItemDto.description,
-          status: updateSaleItemDto.status,
-          unit: parseFloat(updateSaleItemDto.unit.toString()),
-        });
-
-        return updatedSaleItem;
-      } catch (error) {
-        console.error('Error during Sale Item update:', error);
-
-        // Customize the error response to match frontend expectations
-        if (error instanceof ConflictException) {
-          throw new ConflictException({
-            statusCode: 409,
-            message: error.message,
-            error: 'Conflict',
-          });
-        }
-
-        if (error.code === 'ER_DUP_ENTRY') {
-          throw new ConflictException({
-            statusCode: 409,
-            message: 'Unique constraint failed. Please check your data.',
-            error: 'Conflict',
-          });
-        }
-
-        throw new Error('An unexpected error occurred: ' + error.message);
+      if (!saleItem) {
+        throw new NotFoundException(`Sale Item with ID ${id} not found`);
       }
+
+      const relatedItem = saleItem.item;
+      if (!relatedItem) {
+        throw new NotFoundException(`Related item not found for Sale Item with ID ${id}`);
+      }
+
+      if (updateSaleItemDto.status === 'Requested' && relatedItem.quantity < updateSaleItemDto.quantity) {
+        throw new ConflictException('Requested quantity is more than available quantity');
+      }
+
+      let newQuantity = relatedItem.quantity;
+      if (updateSaleItemDto.status === 'Cancelled') {
+        newQuantity = relatedItem.quantity + saleItem.unit;
+
+        const operatorStock = await manager.findOne(OperatorStock, {
+          where: { itemId: relatedItem.id, status: 'Active' },
+        });
+
+        if (operatorStock) {
+          const balanceAfter = operatorStock.quantity - saleItem.unit;
+          await manager.update(OperatorStock, operatorStock.id, {
+            quantity: balanceAfter,
+          });
+          bincardMovement = {
+            itemId: relatedItem.id,
+            movementType: 'OUT',
+            quantity: saleItem.unit,
+            balanceAfter,
+            referenceType: 'SALE',
+            referenceId: saleItem.saleId,
+            description: `Sale item cancelled – stock returned`,
+            uomId: operatorStock.uomId,
+          };
+        }
+      } else if (updateSaleItemDto.status === 'Stocked-out') {
+        newQuantity = relatedItem.quantity - saleItem.unit;
+
+        const operatorStock = await manager.findOne(OperatorStock, {
+          where: { itemId: relatedItem.id, status: 'Active' },
+        });
+
+        if (operatorStock) {
+          const balanceAfter = operatorStock.quantity + saleItem.unit;
+          await manager.update(OperatorStock, operatorStock.id, {
+            quantity: balanceAfter,
+          });
+          bincardMovement = {
+            itemId: relatedItem.id,
+            movementType: 'IN',
+            quantity: saleItem.unit,
+            balanceAfter,
+            referenceType: 'SALE',
+            referenceId: saleItem.saleId,
+            description: `Stocked-out for sale`,
+            uomId: operatorStock.uomId,
+          };
+        } else {
+          await manager.save(OperatorStock, {
+            itemId: relatedItem.id,
+            uomId: saleItem.uomId,
+            quantity: saleItem.unit,
+            description: `Stocked-out for Sale Item ${saleItem.id}`,
+            status: 'Active',
+            baseUomId: saleItem.baseUomId,
+            unit: saleItem.unit,
+          });
+          bincardMovement = {
+            itemId: relatedItem.id,
+            movementType: 'IN',
+            quantity: saleItem.unit,
+            balanceAfter: saleItem.unit,
+            referenceType: 'SALE',
+            referenceId: saleItem.saleId,
+            description: `Stocked-out for sale (new operator stock)`,
+            uomId: saleItem.uomId,
+          };
+        }
+      }
+
+      if (newQuantity < 0) {
+        throw new ConflictException(`Quantity cannot drop below zero for Sale Item with ID ${id}`);
+      }
+
+      await manager.update(Item, relatedItem.id, { quantity: newQuantity });
+
+      const updatedSaleItem = await manager.save(SaleItems, {
+        id,
+        quantity: parseFloat(updateSaleItemDto.quantity.toString()),
+        description: updateSaleItemDto.description,
+        status: updateSaleItemDto.status,
+        unit: parseFloat(updateSaleItemDto.unit.toString()),
+      });
+
+      return updatedSaleItem;
     });
+
+    if (bincardMovement) {
+      await this.bincardService.recordMovement(bincardMovement);
+    }
+
+    return result;
   }
 
   async remove(id: string) {

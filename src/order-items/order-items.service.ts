@@ -7,6 +7,8 @@ import { OrderItems } from 'src/entities/order-item.entity';
 import { Order } from 'src/entities/order.entity';
 import { OperatorStock } from 'src/entities/operator-stock.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
+import { BincardService } from 'src/bincard/bincard.service';
+import type { RecordBincardMovementDto } from 'src/bincard/bincard.service';
 
 @Injectable()
 export class OrderItemsService {
@@ -20,6 +22,7 @@ export class OrderItemsService {
     @InjectRepository(PaymentTerm)
     private readonly paymentTermRepository: Repository<PaymentTerm>,
     private readonly dataSource: DataSource,
+    private readonly bincardService: BincardService,
   ) {}
 
   async create(createOrderItemDto: CreateOrderItemDto) {
@@ -165,7 +168,8 @@ export class OrderItemsService {
     await queryRunner.startTransaction();
 
     try {
-      // Get the current order item to check status changes
+      let pendingBincard: RecordBincardMovementDto | null = null;
+
       const currentOrderItem = await this.orderItemsRepository.findOne({
         where: { id },
         relations: ['item'],
@@ -176,11 +180,9 @@ export class OrderItemsService {
       }
 
       // Handle stock reduction for Printed or Void status (only when status changes to these states)
-      // Only reduce stock for stock services (not non-stock services like PRINT-ONLY, CUT-ONLY)
-      if ((updateOrderItemDto.status === 'Printed' || updateOrderItemDto.status === 'Void') && 
+      if ((updateOrderItemDto.status === 'Printed' || updateOrderItemDto.status === 'Void') &&
           currentOrderItem.status !== 'Printed' && currentOrderItem.status !== 'Void' &&
           !currentOrderItem.isNonStockService) {
-        
         const operatorStock = await this.operatorStockRepository.findOne({
           where: { itemId: currentOrderItem.itemId },
         });
@@ -189,38 +191,53 @@ export class OrderItemsService {
           throw new ConflictException(`Please make a request for item ${currentOrderItem.item.name} before trying to print`);
         }
 
-        // Use unit as the quantity to reduce (unit represents the total measurement amount)
         const quantityToReduce = currentOrderItem.unit;
-        
-        // Check if the stock quantity is sufficient
         if (operatorStock.quantity < quantityToReduce) {
           throw new ConflictException(`Insufficient stock for item: ${currentOrderItem.item.name}. Available: ${operatorStock.quantity}, Required: ${quantityToReduce}`);
         }
 
-        // Reduce stock
+        const newQuantity = operatorStock.quantity - quantityToReduce;
         await queryRunner.manager.update(OperatorStock, operatorStock.id, {
-          quantity: operatorStock.quantity - quantityToReduce,
+          quantity: newQuantity,
         });
+
+        pendingBincard = {
+          itemId: currentOrderItem.itemId,
+          movementType: 'OUT',
+          quantity: quantityToReduce,
+          balanceAfter: newQuantity,
+          referenceType: 'ORDER',
+          referenceId: currentOrderItem.orderId,
+          description: `Order item printed/void – stock reduced`,
+          uomId: operatorStock.uomId,
+        };
       }
 
       // Handle stock restoration when status changes from Printed/Void to other states
-      // Only restore stock for stock services (not non-stock services like PRINT-ONLY, CUT-ONLY)
-      if ((currentOrderItem.status === 'Printed' || currentOrderItem.status === 'Void') && 
+      if ((currentOrderItem.status === 'Printed' || currentOrderItem.status === 'Void') &&
           updateOrderItemDto.status !== 'Printed' && updateOrderItemDto.status !== 'Void' &&
           !currentOrderItem.isNonStockService) {
-        
         const operatorStock = await this.operatorStockRepository.findOne({
           where: { itemId: currentOrderItem.itemId },
         });
 
         if (operatorStock) {
-          // Use unit as the quantity to restore (unit represents the total measurement amount)
           const quantityToRestore = currentOrderItem.unit;
-          
-          // Restore stock
+          const newQuantity = operatorStock.quantity + quantityToRestore;
           await queryRunner.manager.update(OperatorStock, operatorStock.id, {
-            quantity: operatorStock.quantity + quantityToRestore,
+            quantity: newQuantity,
           });
+
+          pendingBincard = {
+            itemId: currentOrderItem.itemId,
+            movementType: 'IN',
+            quantity: quantityToRestore,
+            balanceAfter: newQuantity,
+            referenceType: 'ORDER',
+            referenceId: currentOrderItem.orderId,
+            description: `Order item status reverted – stock restored`,
+            uomId: operatorStock.uomId,
+          };
         }
       }
 
@@ -301,6 +318,10 @@ export class OrderItemsService {
       await this.updateOrderStatus(updateOrderItemDto.orderId, queryRunner);
 
       await queryRunner.commitTransaction();
+
+      if (pendingBincard) {
+        await this.bincardService.recordMovement(pendingBincard);
+      }
 
       return await this.orderItemsRepository.findOne({
         where: { id },

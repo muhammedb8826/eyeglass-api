@@ -23,6 +23,7 @@ import { PurchaseItemNotesModule } from './purchase-item-notes/purchase-item-not
 import { SalesModule } from './sales/sales.module';
 import { SaleItemsModule } from './sale-items/sale-items.module';
 import { SaleItemNotesModule } from './sale-item-notes/sale-item-notes.module';
+import { BincardModule } from './bincard/bincard.module';
 import { OperatorStockModule } from './operator-stock/operator-stock.module';
 import { OrdersModule } from './orders/orders.module';
 import { OrderItemsModule } from './order-items/order-items.module';
@@ -83,6 +84,7 @@ import configuration from './config/configuration';
     FileModule,
     ItemsModule,
     MachinesModule,
+    BincardModule,
     OperatorStockModule,
     OrdersModule,
     OrderItemsModule,
