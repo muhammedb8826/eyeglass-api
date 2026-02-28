@@ -137,8 +137,6 @@ async function seed() {
       pieceCategory = await unitCategoryRepository.save({
         name: 'Piece',
         description: 'Countable items (pcs)',
-        constant: false,
-        constantValue: 1,
       });
       console.log('Unit category "Piece" created');
     } else {

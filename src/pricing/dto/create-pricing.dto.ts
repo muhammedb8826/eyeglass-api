@@ -26,9 +26,5 @@ export class CreatePricingDto {
 
     @IsNumber()
     costPrice: number;
-
-    constant: boolean;
-    width? : number;
-    height? : number;
     baseUomId: string;
 }

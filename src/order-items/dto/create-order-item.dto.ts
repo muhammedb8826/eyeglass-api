@@ -9,8 +9,6 @@ export class CreateOrderItemDto {
     serviceId?: string;
     nonStockServiceId?: string;
     isNonStockService?: boolean;
-    width?: number;
-    height?: number;
     pricingId: string;
     unit: number;
     baseUomId: string;

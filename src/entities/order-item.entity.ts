@@ -32,12 +32,6 @@ export class OrderItems {
   @Column({ default: false })
   isNonStockService: boolean;
 
-  @Column('float', { nullable: true })
-  width: number;
-
-  @Column('float', { nullable: true })
-  height: number;
-
   // Eyeglass lens prescription (per-eye) and common lens parameters
   @Column('float', { nullable: true })
   sphereRight: number;

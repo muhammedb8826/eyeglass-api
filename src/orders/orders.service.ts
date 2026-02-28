@@ -137,8 +137,6 @@ export class OrdersService {
 
       // Create order items with calculated totalCost and sales (use resolved pricing)
       const orderItems = await Promise.all(resolvedOrderItems.map(async (item) => {
-        const width = item.width ? parseFloat(item.width.toString()) : null;
-        const height = item.height ? parseFloat(item.height.toString()) : null;
         const quantity = parseFloat((item.quantity || 0).toString());
 
         // Determine which service ID to use for calculations (null for item-only eyeglass lines)
@@ -152,8 +150,6 @@ export class OrdersService {
             item.itemId,
             serviceIdForCalculation,
             item.uomId,
-            width,
-            height,
             quantity,
             item.isNonStockService,
             item.itemBaseId
@@ -162,8 +158,6 @@ export class OrdersService {
             item.itemId,
             serviceIdForCalculation,
             item.uomId,
-            width,
-            height,
             quantity,
             item.isNonStockService,
             item.itemBaseId
@@ -179,8 +173,6 @@ export class OrdersService {
           serviceId: item.isNonStockService ? null : item.serviceId,
           nonStockServiceId: item.isNonStockService ? item.nonStockServiceId : null,
           isNonStockService: item.isNonStockService || false,
-          width: width,
-          height: height,
           discount: parseFloat((item.discount || 0).toString()),
           level: parseFloat((item.level || 0).toString()),
           // Lens / prescription fields
@@ -606,15 +598,12 @@ export class OrdersService {
 
       // Upsert order items with calculated totalCost and sales
       for (const item of orderItems) {
-        const width = item.width != null ? parseFloat(item.width.toString()) : null;
-        const height = item.height != null ? parseFloat(item.height.toString()) : null;
         const quantity = parseFloat((item.quantity || 0).toString());
 
         // Determine if this is a non-stock service
         const isNonStockService = item.isNonStockService || !!item.nonStockServiceId;
         const serviceId = isNonStockService ? item.nonStockServiceId : item.serviceId;
 
-        // Only calculate pricing if service information is provided
         let totalCostResult = { totalCost: 0, unit: 0, baseUomId: item.baseUomId || item.uomId };
         let salesResult = { sales: 0, unit: 0, baseUomId: item.baseUomId || item.uomId };
 
@@ -623,8 +612,6 @@ export class OrdersService {
             item.itemId,
             serviceId,
             item.uomId,
-            width,
-            height,
             quantity,
             isNonStockService,
             item.itemBaseId
@@ -633,8 +620,6 @@ export class OrdersService {
             item.itemId,
             serviceId,
             item.uomId,
-            width,
-            height,
             quantity,
             isNonStockService,
             item.itemBaseId
@@ -651,8 +636,6 @@ export class OrdersService {
             serviceId: isNonStockService ? null : item.serviceId,
             nonStockServiceId: isNonStockService ? item.nonStockServiceId : null,
             isNonStockService: isNonStockService,
-            width: width,
-            height: height,
             discount: parseFloat((item.discount || 0).toString()),
             level: parseFloat((item.level || 0).toString()),
             // Lens / prescription fields
@@ -698,8 +681,6 @@ export class OrdersService {
             serviceId: isNonStockService ? null : item.serviceId,
             nonStockServiceId: isNonStockService ? item.nonStockServiceId : null,
             isNonStockService: isNonStockService,
-            width: width,
-            height: height,
             discount: parseFloat((item.discount || 0).toString()),
             level: parseFloat((item.level || 0).toString()),
             // Lens / prescription fields
@@ -964,15 +945,13 @@ export class OrdersService {
     }
   }
 
-  // Calculate unit price for constant items (with width and height) - matches frontend calculateUnitPrice
-  private async calculateUnitPriceForConstantItems(
+  // Calculate unit and base UOM for a quantity using UOM conversion
+  private async calculateUnitForQuantity(
     itemId: string,
     serviceId: string | null,
     uomId: string,
-    width: number,
-    height: number,
     quantity: number,
-    itemBaseId?: string | null
+    _itemBaseId?: string | null
   ): Promise<{ unitPrice: number; unit: number; baseUomId: string }> {
     const item = await this.itemRepository.findOne({
       where: { id: itemId },
@@ -988,122 +967,6 @@ export class OrdersService {
       throw new BadRequestException(`UOM ${uomId} not found for item ${itemId}`);
     }
 
-    let pricing;
-    if (serviceId) {
-      pricing = await this.pricingRepository.findOne({
-        where: { itemId, serviceId, isNonStockService: false }
-      });
-      if (!pricing) {
-        pricing = await this.pricingRepository.findOne({
-          where: { itemId, nonStockServiceId: serviceId, isNonStockService: true }
-        });
-      }
-    } else {
-      pricing = await this.pricingRepository.findOne({
-        where: {
-          itemId,
-          ...(itemBaseId ? { itemBaseId } : { itemBaseId: IsNull() }),
-          serviceId: IsNull(),
-          nonStockServiceId: IsNull(),
-        },
-      });
-    }
-
-    if (!pricing || pricing.sellingPrice <= 0) {
-      throw new BadRequestException(`Pricing not found or invalid for item ${itemId}`);
-    }
-
-    // Check if unit category is constant and has width/height
-    if (!item.unitCategory.constant || !width || !height) {
-      throw new BadRequestException(`Item ${itemId} is not a constant unit category or missing width/height`);
-    }
-
-    // Find base unit
-    const baseUnit = item.unitCategory.uoms.find(unit => unit.baseUnit === true);
-    if (!baseUnit) {
-      throw new BadRequestException(`Base unit not found for item ${itemId}`);
-    }
-
-    // Calculate converted dimensions
-    const convertedWidth = width * foundUom.conversionRate;
-    const convertedHeight = height * foundUom.conversionRate;
-    
-    // Calculate unit (matches frontend: convertedWidth * convertedHeight * quantity)
-    const unit = convertedWidth * convertedHeight * quantity;
-    
-    // Calculate combination (matches frontend: convertedWidth * convertedHeight * quantity * servicePrice)
-    const combination = unit * pricing.sellingPrice;
-    
-    // Calculate divider (matches frontend: pricing.width * pricing.height)
-    const divider = (pricing.width || 0) * (pricing.height || 0);
-    
-    if (divider === 0) {
-      throw new BadRequestException(`Invalid pricing dimensions for item ${itemId}`);
-    }
-
-    // Calculate unit price (matches frontend: combination / divider)
-    const unitPrice = combination / divider;
-
-    return {
-      unitPrice,
-      unit,
-      baseUomId: baseUnit.id
-    };
-  }
-
-  // Calculate unit price for non-constant items (without width and height) - matches frontend calculateUnitPriceForNonAreaItems
-  private async calculateUnitPriceForNonConstantItems(
-    itemId: string,
-    serviceId: string | null,
-    uomId: string,
-    quantity: number,
-    itemBaseId?: string | null
-  ): Promise<{ unitPrice: number; unit: number; baseUomId: string }> {
-    const item = await this.itemRepository.findOne({
-      where: { id: itemId },
-      relations: ['unitCategory', 'unitCategory.uoms']
-    });
-
-    if (!item || !item.unitCategory) {
-      throw new BadRequestException(`Item or unit category not found for item ${itemId}`);
-    }
-
-    const foundUom = item.unitCategory.uoms.find(uom => uom.id === uomId);
-    if (!foundUom) {
-      throw new BadRequestException(`UOM ${uomId} not found for item ${itemId}`);
-    }
-
-    let pricing;
-    if (serviceId) {
-      pricing = await this.pricingRepository.findOne({
-        where: { itemId, serviceId, isNonStockService: false }
-      });
-      if (!pricing) {
-        pricing = await this.pricingRepository.findOne({
-          where: { itemId, nonStockServiceId: serviceId, isNonStockService: true }
-        });
-      }
-    } else {
-      pricing = await this.pricingRepository.findOne({
-        where: {
-          itemId,
-          ...(itemBaseId ? { itemBaseId } : { itemBaseId: IsNull() }),
-          serviceId: IsNull(),
-          nonStockServiceId: IsNull(),
-        },
-      });
-    }
-
-    if (!pricing || pricing.sellingPrice <= 0) {
-      throw new BadRequestException(`Pricing not found or invalid for item ${itemId}`);
-    }
-
-    // Check if unit category is NOT constant
-    if (item.unitCategory.constant) {
-      throw new BadRequestException(`Item ${itemId} is a constant unit category but should be non-constant`);
-    }
-
-    // Find base unit
     const baseUnit = item.unitCategory.uoms.find(unit => unit.baseUnit === true);
     if (!baseUnit) {
       throw new BadRequestException(`Base unit not found for item ${itemId}`);
@@ -1111,18 +974,9 @@ export class OrdersService {
 
     // Calculate converted quantity (matches frontend: quantity * conversionRate)
     const convertedQuantity = quantity * foundUom.conversionRate;
-    
-    // Calculate unit (matches frontend: convertedQuantity)
     const unit = convertedQuantity;
-    
-    // Calculate unit price (matches frontend: convertedQuantity * sellingPrice)
-    const unitPrice = convertedQuantity * pricing.sellingPrice;
 
-    return {
-      unitPrice,
-      unit,
-      baseUomId: baseUnit.id
-    };
+    return { unitPrice: 0, unit, baseUomId: baseUnit.id };
   }
 
   // Calculate total cost for an order item
@@ -1130,8 +984,6 @@ export class OrdersService {
     itemId: string,
     serviceId: string | null,
     uomId: string,
-    width: number | null,
-    height: number | null,
     quantity: number,
     isNonStockService: boolean = false,
     itemBaseId?: string | null
@@ -1173,18 +1025,7 @@ export class OrdersService {
       return { totalCost: 0, unit: 0, baseUomId: uomId };
     }
 
-    let unit: number;
-    let baseUomId: string;
-
-    if (item.unitCategory.constant && width && height) {
-      const result = await this.calculateUnitPriceForConstantItems(itemId, serviceId, uomId, width, height, quantity, itemBaseId);
-      unit = result.unit;
-      baseUomId = result.baseUomId;
-    } else {
-      const result = await this.calculateUnitPriceForNonConstantItems(itemId, serviceId, uomId, quantity, itemBaseId);
-      unit = result.unit;
-      baseUomId = result.baseUomId;
-    }
+    const { unit, baseUomId } = await this.calculateUnitForQuantity(itemId, serviceId, uomId, quantity, itemBaseId);
 
     const totalCost = unit * (pricing.costPrice || 0);
     return { totalCost, unit, baseUomId };
@@ -1195,8 +1036,6 @@ export class OrdersService {
     itemId: string,
     serviceId: string | null,
     uomId: string,
-    width: number | null,
-    height: number | null,
     quantity: number,
     isNonStockService: boolean = false,
     itemBaseId?: string | null
@@ -1210,18 +1049,7 @@ export class OrdersService {
       throw new BadRequestException(`Item or unit category not found for item ${itemId}`);
     }
 
-    let unit: number;
-    let baseUomId: string;
-
-    if (item.unitCategory.constant && width && height) {
-      const result = await this.calculateUnitPriceForConstantItems(itemId, serviceId, uomId, width, height, quantity, itemBaseId);
-      unit = result.unit;
-      baseUomId = result.baseUomId;
-    } else {
-      const result = await this.calculateUnitPriceForNonConstantItems(itemId, serviceId, uomId, quantity, itemBaseId);
-      unit = result.unit;
-      baseUomId = result.baseUomId;
-    }
+    const { unit, baseUomId } = await this.calculateUnitForQuantity(itemId, serviceId, uomId, quantity, itemBaseId);
 
     let pricing;
     if (serviceId) {
@@ -1728,8 +1556,8 @@ export class OrdersService {
     // Process each order and its items (orders are already sorted by orderDate DESC)
     for (const order of orders) {
       for (const orderItem of order.orderItems) {
-        const unit = (orderItem.width || 0) * (orderItem.height || 0);
-        const metersquare = unit * orderItem.quantity;
+        const unit = orderItem.unit || orderItem.quantity || 0;
+        const metersquare = unit; // for eyeglass, treat unit as the measurement basis
         const pricing = orderItem.pricing;
         if (!pricing) continue;
 
@@ -1737,8 +1565,8 @@ export class OrdersService {
         const salesForItem = metersquare * pricing.sellingPrice;
         
         const orderTotalSales = order.orderItems.reduce((s, item) => {
-          const itemUnit = (item.width || 0) * (item.height || 0);
-          const itemMetersquare = itemUnit * item.quantity;
+          const itemUnit = item.unit || item.quantity || 0;
+          const itemMetersquare = itemUnit;
           const itemPricing = item.pricing;
           return s + (itemMetersquare * (itemPricing?.sellingPrice || 0));
         }, 0);

@@ -72,9 +72,6 @@ export class PricingService {
       isNonStockService: correctedIsNonStockService ?? false,
       sellingPrice: createPricingDto.sellingPrice,
       costPrice: createPricingDto.costPrice,
-      constant: createPricingDto.constant,
-      width: createPricingDto.width,
-      height: createPricingDto.height,
       baseUomId: createPricingDto.baseUomId,
     };
 

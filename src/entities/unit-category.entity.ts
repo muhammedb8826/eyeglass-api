@@ -19,12 +19,6 @@ export class UnitCategory {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @Column()
-  constant: boolean;
-
-  @Column('float')
-  constantValue: number;
-
   @OneToMany(() => UOM, uom => uom.unitCategory)
   uoms: UOM[];
 

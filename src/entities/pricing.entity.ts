@@ -39,15 +39,6 @@ export class Pricing {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @Column({ default: false })
-  constant: boolean;
-
-  @Column('float', { nullable: true })
-  height: number;
-
-  @Column('float', { nullable: true })
-  width: number;
-
   @Column()
   baseUomId: string;
 

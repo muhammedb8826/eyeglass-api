@@ -265,12 +265,6 @@ export class OrderItemsService {
         itemBaseId: updateOrderItemDto.itemBaseId ?? undefined,
         quantity: updateOrderItemDto.quantity,
         serviceId: updateOrderItemDto.serviceId,
-        width: updateOrderItemDto.width !== null && updateOrderItemDto.width !== undefined
-          ? parseFloat(updateOrderItemDto.width.toString())
-          : null,
-        height: updateOrderItemDto.height !== null && updateOrderItemDto.height !== undefined
-          ? parseFloat(updateOrderItemDto.height.toString())
-          : null,
         discount: parseFloat((updateOrderItemDto.discount || 0).toString()),
         level: updateOrderItemDto.level,
         // Lens / prescription fields

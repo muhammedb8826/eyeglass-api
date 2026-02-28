@@ -45,8 +45,6 @@ Key fields:
 - `isNonStockService: boolean` – flags whether this pricing row is for a non‑stock service
 - `sellingPrice: number` – how much we charge (per base unit)
 - `costPrice: number` – internal cost (per base unit)
-- `constant: boolean` – if `true`, price depends on width/height (area‑based)
-- `width?: number`, `height?: number` – reference dimensions for constant pricing
 - `baseUomId: string` – base UOM for the pricing (e.g. pcs, pair, m²)
 
 Relations:
@@ -75,9 +73,6 @@ Body shape (`CreatePricingDto`):
   "isNonStockService": false,
   "sellingPrice": 1000,
   "costPrice": 0,
-  "constant": false,
-  "width": 1,
-  "height": 1,
   "baseUomId": "uuid-of-uom"
 }
 ```
@@ -92,7 +87,6 @@ To define a price for a lens blank (and optional base) **without any service**:
   - `baseUomId`
 - **Optional**:
   - `itemBaseId` – when the material has bases (3221, 1311, …)
-  - `constant`, `width`, `height` – if you use area‑based pricing; otherwise `constant: false`
 - **Leave out** (or send `null`, not empty string):
   - `serviceId`
   - `nonStockServiceId`
@@ -106,7 +100,6 @@ POST /api/v1/pricing
   "itemBaseId": "uuid-of-3221-base-350-plus-2.5",
   "sellingPrice": 800,
   "costPrice": 400,
-  "constant": false,
   "baseUomId": "uuid-of-pcs-uom"
 }
 ```
@@ -133,7 +126,6 @@ If you want to price an item together with a **service**:
   "serviceId": "uuid-of-service",
   "sellingPrice": 900,
   "costPrice": 450,
-  "constant": false,
   "baseUomId": "uuid-of-uom"
 }
 ```
@@ -147,7 +139,6 @@ If you want to price an item together with a **service**:
   "isNonStockService": true,
   "sellingPrice": 900,
   "costPrice": 450,
-  "constant": false,
   "baseUomId": "uuid-of-uom"
 }
 ```

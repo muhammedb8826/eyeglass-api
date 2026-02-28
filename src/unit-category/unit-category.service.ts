@@ -17,7 +17,7 @@ export class UnitCategoryService {
   ) {}
 
   async create(createUnitCategoryDto: CreateUnitCategoryDto) {
-    const { name, description, constant, constantValue } = createUnitCategoryDto;
+    const { name, description } = createUnitCategoryDto;
 
     const existingByName = await this.unitCategoryRepository.findOne({
       where: {
@@ -27,13 +27,9 @@ export class UnitCategoryService {
 
     if (existingByName) throw new ConflictException('Unit Category already exists');
 
-    if (constant && constantValue < 2) throw new ConflictException('Constant value must be greater than 1');
-
     const unitCategory = this.unitCategoryRepository.create({
       name,
       description,
-      constant,
-      constantValue
     });
 
     return await this.unitCategoryRepository.save(unitCategory);
@@ -73,13 +69,11 @@ export class UnitCategoryService {
       throw new NotFoundException('Unit Category not found');
     }
 
-    const { name, description, constant, constantValue } = updateUnitCategoryDto;
+    const { name, description } = updateUnitCategoryDto;
 
     await this.unitCategoryRepository.update(id, {
       name,
       description,
-      constant,
-      constantValue
     });
 
     return this.unitCategoryRepository.findOne({
