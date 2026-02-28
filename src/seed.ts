@@ -4,6 +4,7 @@ import { Role } from './enums/role.enum';
 import { UnitCategory } from './entities/unit-category.entity';
 import { UOM } from './entities/uom.entity';
 import { Item } from './entities/item.entity';
+import { ItemBase } from './entities/item-base.entity';
 import { Machine } from './entities/machine.entity';
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
@@ -26,6 +27,7 @@ async function seed() {
     const unitCategoryRepository = AppDataSource.getRepository(UnitCategory);
     const uomRepository = AppDataSource.getRepository(UOM);
     const itemRepository = AppDataSource.getRepository(Item);
+    const itemBaseRepository = AppDataSource.getRepository(ItemBase);
     const machineRepository = AppDataSource.getRepository(Machine);
 
     // Seed Admin User
@@ -194,6 +196,20 @@ async function seed() {
         lensMaterial: 'PLASTIC',
         lensIndex: 1.5,
       },
+      {
+        itemCode: '3221',
+        name: 'Progressi plastic solar',
+        lensType: 'PROGRESSIVE',
+        lensMaterial: 'PLASTIC',
+        lensIndex: 1.5,
+      },
+      {
+        itemCode: '1311',
+        name: 'SV Plastic (multi-base)',
+        lensType: 'SINGLE_VISION',
+        lensMaterial: 'PLASTIC',
+        lensIndex: 1.5,
+      },
     ];
 
     for (const lensItem of lensItemsData) {
@@ -226,6 +242,31 @@ async function seed() {
         console.log(`Lens item "${lensItem.itemCode} - ${lensItem.name}" created`);
       } else {
         console.log(`Lens item "${lensItem.itemCode} - ${lensItem.name}" already exists`);
+      }
+    }
+
+    // Seed item bases: 3221(350^+25, 575^+25), 1311(400^+25, 600^+25, 800^+75, 1000^+75)
+    const itemBasesData: { itemCode: string; baseCode: string; addPower: number }[] = [
+      { itemCode: '3221', baseCode: '350', addPower: 2.5 },
+      { itemCode: '3221', baseCode: '575', addPower: 2.5 },
+      { itemCode: '1311', baseCode: '400', addPower: 2.5 },
+      { itemCode: '1311', baseCode: '600', addPower: 2.5 },
+      { itemCode: '1311', baseCode: '800', addPower: 7.5 },
+      { itemCode: '1311', baseCode: '1000', addPower: 7.5 },
+    ];
+    for (const row of itemBasesData) {
+      const item = await itemRepository.findOne({ where: { itemCode: row.itemCode } });
+      if (!item) continue;
+      const existing = await itemBaseRepository.findOne({
+        where: { itemId: item.id, baseCode: row.baseCode, addPower: row.addPower },
+      });
+      if (!existing) {
+        await itemBaseRepository.save({
+          itemId: item.id,
+          baseCode: row.baseCode,
+          addPower: row.addPower,
+        });
+        console.log(`Item base ${row.itemCode}(${row.baseCode}^+${row.addPower}) created`);
       }
     }
 

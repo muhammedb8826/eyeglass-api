@@ -24,7 +24,16 @@ export class ItemsController {
     return this.itemsService.findAllItems();
   }
 
+  @Get(':id/bases')
+  findBases(@Param('id') id: string) {
+    return this.itemsService.findBasesByItemId(id);
+  }
 
+  /** Pricing and tool (machine) for this item when creating an order line. Optional ?itemBaseId= for base variant. */
+  @Get(':id/order-info')
+  getOrderInfo(@Param('id') id: string, @Query('itemBaseId') itemBaseId?: string) {
+    return this.itemsService.getOrderInfo(id, itemBaseId ?? null);
+  }
 
   @Get(':id')
   findOne(@Param('id') id: string) {

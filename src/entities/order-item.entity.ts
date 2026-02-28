@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { Item } from './item.entity';
+import { ItemBase } from './item-base.entity';
 import { Order } from './order.entity';
 import { Pricing } from './pricing.entity';
 import { UOM } from './uom.entity';
@@ -17,6 +18,10 @@ export class OrderItems {
 
   @Column()
   itemId: string;
+
+  /** When material has bases (e.g. 3221 with 350^+25, 575^+25), which variant was chosen */
+  @Column({ nullable: true })
+  itemBaseId: string;
 
   @Column({ nullable: true })
   serviceId: string;
@@ -151,6 +156,10 @@ export class OrderItems {
   @ManyToOne(() => Item, item => item.OrderItems)
   @JoinColumn({ name: 'itemId' })
   item: Item;
+
+  @ManyToOne(() => ItemBase, itemBase => itemBase.orderItems)
+  @JoinColumn({ name: 'itemBaseId' })
+  itemBase: ItemBase;
 
   @ManyToOne(() => Order, order => order.orderItems)
   @JoinColumn({ name: 'orderId' })

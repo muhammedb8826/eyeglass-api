@@ -1,18 +1,24 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository, ILike, IsNull } from 'typeorm';
 import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { Item } from '../entities/item.entity';
+import { ItemBase } from '../entities/item-base.entity';
 import { Machine } from '../entities/machine.entity';
+import { Pricing } from '../entities/pricing.entity';
 
 @Injectable()
 export class ItemsService {
   constructor(
     @InjectRepository(Item)
     private itemRepository: Repository<Item>,
+    @InjectRepository(ItemBase)
+    private itemBaseRepository: Repository<ItemBase>,
     @InjectRepository(Machine)
-    private machineRepository: Repository<Machine>
+    private machineRepository: Repository<Machine>,
+    @InjectRepository(Pricing)
+    private pricingRepository: Repository<Pricing>,
   ) {}
 
   async create(createItemDto: CreateItemDto) {
@@ -124,14 +130,54 @@ export class ItemsService {
         purchaseUom: true,
         unitCategory: {
           uoms: true
-        }
+        },
+        itemBases: true,
       }
     });
-    
+
     if (!item) {
       throw new NotFoundException(`Item with ID ${id} not found`);
     }
     return item;
+  }
+
+  /** Get bases for an item (e.g. 3221 → 350^+2.5, 575^+2.5). Returns empty array if item has no bases. */
+  async findBasesByItemId(itemId: string) {
+    const item = await this.itemRepository.findOne({ where: { id: itemId } });
+    if (!item) {
+      throw new NotFoundException(`Item with ID ${itemId} not found`);
+    }
+    return this.itemBaseRepository.find({
+      where: { itemId },
+      order: { baseCode: 'ASC', addPower: 'ASC' },
+    });
+  }
+
+  /**
+   * When item is selected for an order line: return pricing (item-only) and tool (machine).
+   * Frontend can use this to check pricing and required machine before creating the order item.
+   */
+  async getOrderInfo(itemId: string, itemBaseId?: string | null) {
+    const item = await this.itemRepository.findOne({
+      where: { id: itemId },
+      relations: { machine: true, defaultUom: true, unitCategory: true, itemBases: true },
+    });
+    if (!item) {
+      throw new NotFoundException(`Item with ID ${itemId} not found`);
+    }
+    const pricing = await this.pricingRepository.findOne({
+      where: {
+        itemId,
+        ...(itemBaseId ? { itemBaseId } : { itemBaseId: IsNull() }),
+        serviceId: IsNull(),
+        nonStockServiceId: IsNull(),
+      },
+    });
+    return {
+      item,
+      pricing: pricing ?? null,
+      machine: item.machine ?? null,
+    };
   }
 
   async update(id: string, updateItemDto: UpdateItemDto) {

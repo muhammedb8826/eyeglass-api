@@ -4,6 +4,8 @@ export class CreateOrderItemDto {
     id: string;
     orderId: string;
     itemId: string;
+    /** When the item has bases (e.g. 3221 with 350^+25, 575^+25), the chosen variant */
+    itemBaseId?: string;
     serviceId?: string;
     nonStockServiceId?: string;
     isNonStockService?: boolean;

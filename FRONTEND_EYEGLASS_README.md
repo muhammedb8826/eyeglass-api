@@ -107,6 +107,13 @@ All are optional in the API; enforce what you need in the UI.
   - `pd` – binocular PD
   - `pdMonocularRight`, `pdMonocularLeft` – monocular PD values
 
+**Addition (ADD)**  
+- Prefer **from the doctor’s prescription**: send `addRight`, `addLeft` in diopters (e.g. `2.5` for +2.50 D).  
+- If ADD is **not** on the prescription, derive it from the **spare (reading) prescription**:
+  - **ADD = close vision power − distance vision power** (same eye).
+  - Example: distance vision +1.50, close vision +4.00 → ADD = +4.00 − (+1.50) = **+2.50 D** (often written as 250 in 0.01 steps, e.g. on item bases as +25).
+  - Store the result in `addRight` / `addLeft` and use it to select the correct **item base** (e.g. for code 3221, ADD +2.50 → choose the base variant 350^+25 or 575^+25).
+
 ### 4.2 Lens parameters
 
 - `lensType` – `"SINGLE_VISION"`, `"BIFOCAL"`, `"PROGRESSIVE"`, etc.
@@ -117,10 +124,26 @@ All are optional in the API; enforce what you need in the UI.
 - `diameter` – lens diameter, numeric
 - `tintColor` – e.g. `"GRAY"`, `"BROWN"`, `"GREEN"`
 
-These live alongside the existing required ordering fields:
+When the selected item has **bases** (see §5.3), you can send:
 
-- `itemId`, `serviceId` or `nonStockServiceId`, `isNonStockService`
-- `pricingId`, `uomId`, `baseUomId`
+- `itemBaseId?: string` – ID of the chosen variant (e.g. 3221 with base 350 and add +2.5). Omit if the item has no bases or a single variant.
+
+**Services optional (eyeglass item-only)**  
+For lens-only order lines you do **not** need to send a service. When the user selects an **item** (and optionally a **base** variant), the system should:
+
+1. **Check pricing and tool** – Call `GET /api/v1/items/:id/order-info?itemBaseId=...` (omit `itemBaseId` if the item has no bases or one variant). The response includes:
+   - `item` – the lens blank (with `machine` = required tool)
+   - `pricing` – item-only pricing for that item (+ base), or `null` if none is configured
+   - `machine` – the machine/tool required for this item
+
+2. **Create the order item** – Send `itemId`, optional `itemBaseId`, `uomId`, `baseUomId` (e.g. from `item.defaultUomId` and `pricing.baseUomId`). You can omit `pricingId`: the backend resolves it from the item (and itemBase). You can omit `serviceId` and `nonStockServiceId` for item-only lines.
+
+Order responses (`GET /api/v1/orders`, `GET /api/v1/orders/:id`) include `orderItems[].item` and `orderItems[].item.machine` so the frontend can show the **tool** per line.
+
+These live alongside the existing ordering fields:
+
+- `itemId`, optional `itemBaseId`, optional `serviceId` / `nonStockServiceId`, `isNonStockService`
+- `pricingId` (optional – resolved from item + itemBase when omitted), `uomId`, `baseUomId`
 - `quantity`, `unitPrice`, `totalAmount`, `discount`, `level`, `status`, etc.
 
 ### 4.3 Example order item in `orderItems[]`
@@ -188,12 +211,34 @@ You can display them in Rx detail views, job tickets, and production UIs.
 
 ### 5.1 New fields on `Item`
 
-- `itemCode?: string` – optional **short code** (e.g. `1113`, `1123`, `3425`)
+- `itemCode?: string` – optional **short code** (e.g. `1113`, `1123`, `3221`, `1311`)
 - `lensMaterial?: string`
 - `lensIndex?: number`
 - `lensType?: string`
 
-### 5.2 Example item payload
+### 5.2 Material bases (itemCode with base^add variants)
+
+Some materials have **multiple bases** per item code, e.g.:
+
+- **3221** (Progressi plastic solar): `350^+25`, `575^+25` (base 350 or 575, add +2.50 D)
+- **1311**: `400^+25`, `600^+25`, `800^+75`, `1000^+75` (bases 400/600/800/1000 with add +2.50 or +7.50 D)
+
+The API models this with an **ItemBase** entity per variant:
+
+- `id` – UUID
+- `itemId` – parent item
+- `baseCode` – e.g. `"350"`, `"575"`, `"400"`, `"600"`, `"800"`, `"1000"`
+- `addPower` – add power in diopters (e.g. `2.5`, `7.5`)
+
+**Endpoints:**
+
+- `GET /api/v1/items/:id` – item response includes `itemBases[]` when present (optional relation).
+- `GET /api/v1/items/:id/bases` – returns the list of bases for that item (e.g. for dropdown when creating an order line).
+- `GET /api/v1/items/:id/order-info?itemBaseId=...` – when the user selects an item for an order line, returns **pricing** (item-only for that item and base) and **tool** (`machine`). Use this to check pricing and required machine before creating the order item.
+
+When creating or updating an **order item** for an item that has bases, send `itemBaseId` with the chosen variant’s ID. Order item responses include an `itemBase` object when set (with `baseCode`, `addPower`).
+
+### 5.3 Example item payload
 
 ```json
 {
@@ -218,8 +263,9 @@ You can display them in Rx detail views, job tickets, and production UIs.
 On reads (`GET /api/v1/items` / `/items/:id`), use these to:
 
 - Group items in dropdowns by material / index / type.
-- Show or search by `itemCode` (e.g. printed codes like `1113`, `1123`, `3425`).
+- Show or search by `itemCode` (e.g. printed codes like `1113`, `1123`, `3221`, `1311`).
 - Auto-fill some defaults when the user selects a lens blank for an order item.
+- If the item has `itemBases`, show a second dropdown (or list) so the user picks the base variant (e.g. 350^+2.5); then send `itemBaseId` on the order item.
 
 ---
 

@@ -61,6 +61,7 @@ export class OrderItemsService {
         'uom',
         'pricing',
         'item',
+        'itemBase',
         'service',
         'orderItemNotes',
         'orderItemNotes.user'
@@ -76,6 +77,7 @@ export class OrderItemsService {
       .leftJoinAndSelect('orderItems.uom', 'uom')
       .leftJoinAndSelect('orderItems.pricing', 'pricing')
       .leftJoinAndSelect('orderItems.item', 'item')
+      .leftJoinAndSelect('orderItems.itemBase', 'itemBase')
       .leftJoinAndSelect('orderItems.service', 'service')
       .leftJoinAndSelect('orderItems.orderItemNotes', 'orderItemNotes')
       .leftJoinAndSelect('orderItemNotes.user', 'user')
@@ -153,7 +155,7 @@ export class OrderItemsService {
   async findOne(id: string) {
     return this.orderItemsRepository.findOne({
       where: { id },
-      relations: ['order', 'uom', 'pricing', 'item', 'service', 'nonStockService', 'orderItemNotes', 'orderItemNotes.user'],
+      relations: ['order', 'uom', 'pricing', 'item', 'itemBase', 'service', 'nonStockService', 'orderItemNotes', 'orderItemNotes.user'],
     });
   }
 
@@ -260,6 +262,7 @@ export class OrderItemsService {
       await queryRunner.manager.update(OrderItems, id, {
         orderId: updateOrderItemDto.orderId,
         itemId: updateOrderItemDto.itemId,
+        itemBaseId: updateOrderItemDto.itemBaseId ?? undefined,
         quantity: updateOrderItemDto.quantity,
         serviceId: updateOrderItemDto.serviceId,
         width: updateOrderItemDto.width !== null && updateOrderItemDto.width !== undefined
@@ -307,7 +310,7 @@ export class OrderItemsService {
 
       return await this.orderItemsRepository.findOne({
         where: { id },
-        relations: ['order', 'item', 'service', 'pricing', 'uom'],
+        relations: ['order', 'item', 'itemBase', 'service', 'pricing', 'uom'],
       });
     } catch (error) {
       await queryRunner.rollbackTransaction();
