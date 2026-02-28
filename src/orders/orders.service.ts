@@ -135,6 +135,9 @@ export class OrdersService {
 
       const savedOrder = await queryRunner.manager.save(Order, order);
 
+      // Normalize empty strings to null for UUID columns (Postgres rejects "" as UUID)
+      const normUuid = (v: string | null | undefined) => (v && String(v).trim() !== '' ? v : null);
+
       // Create order items with calculated totalCost and sales (use resolved pricing)
       const orderItems = await Promise.all(resolvedOrderItems.map(async (item) => {
         const quantity = parseFloat((item.quantity || 0).toString());
@@ -166,12 +169,18 @@ export class OrdersService {
           console.warn(`Pricing calculation failed for item ${item.itemId}:`, error.message);
         }
 
+        // Use calculated sales when payload sends 0 so item/order totals are correct
+        const payloadTotal = parseFloat((item.totalAmount || 0).toString());
+        const payloadUnitPrice = parseFloat((item.unitPrice || 0).toString());
+        const totalAmount = payloadTotal > 0 ? payloadTotal : (salesResult.sales ?? 0);
+        const unitPrice = payloadUnitPrice > 0 ? payloadUnitPrice : (quantity > 0 ? totalAmount / quantity : 0);
+
         return this.orderItemsRepository.create({
           orderId: savedOrder.id,
           itemId: item.itemId,
-          itemBaseId: item.itemBaseId || null,
-          serviceId: item.isNonStockService ? null : item.serviceId,
-          nonStockServiceId: item.isNonStockService ? item.nonStockServiceId : null,
+          itemBaseId: normUuid(item.itemBaseId),
+          serviceId: item.isNonStockService ? null : normUuid(item.serviceId),
+          nonStockServiceId: item.isNonStockService ? normUuid(item.nonStockServiceId) : null,
           isNonStockService: item.isNonStockService || false,
           discount: parseFloat((item.discount || 0).toString()),
           level: parseFloat((item.level || 0).toString()),
@@ -196,11 +205,11 @@ export class OrdersService {
           baseCurve: item.baseCurve,
           diameter: item.diameter,
           tintColor: item.tintColor,
-          totalAmount: parseFloat((item.totalAmount || 0).toString()),
+          totalAmount,
           adminApproval: item.adminApproval || false,
           uomId: item.uomId,
           quantity: quantity,
-          unitPrice: parseFloat((item.unitPrice || 0).toString()),
+          unitPrice,
           description: item.description || '',
           isDiscounted: item.isDiscounted || false,
           status: item.status,
@@ -213,6 +222,18 @@ export class OrdersService {
       }));
 
       await queryRunner.manager.save(OrderItems, orderItems);
+
+      // Recalculate order totals from the created items
+      const recalculatedTotalAmount = orderItems.reduce((sum, oi) => sum + (oi.totalAmount || 0), 0);
+      const recalculatedTotalQuantity = orderItems.reduce((sum, oi) => sum + (oi.quantity || 0), 0);
+      const tax = order.tax || 0;
+      const recalculatedGrandTotal = recalculatedTotalAmount + tax;
+
+      await queryRunner.manager.update(Order, savedOrder.id, {
+        totalAmount: recalculatedTotalAmount,
+        totalQuantity: recalculatedTotalQuantity,
+        grandTotal: recalculatedGrandTotal,
+      });
 
       // Stock reduction is now handled when status changes to "Printed" in the order items service
       // Removed stock reduction from order creation
@@ -628,13 +649,24 @@ export class OrdersService {
           console.warn(`Pricing calculation failed for item ${item.itemId}:`, error.message);
         }
 
+        // Normalize empty strings to null for UUID columns (Postgres rejects "" as UUID)
+        const norm = (v: string | null | undefined) => (v && String(v).trim() !== '' ? v : null);
+        const serviceIdVal = isNonStockService ? null : norm(item.serviceId);
+        const nonStockServiceIdVal = isNonStockService ? norm(item.nonStockServiceId) : null;
+
+        // Use calculated sales when payload sends 0 so item/order totals stay correct
+        const payloadTotal = parseFloat((item.totalAmount || 0).toString());
+        const payloadUnitPrice = parseFloat((item.unitPrice || 0).toString());
+        const totalAmountToUse = payloadTotal > 0 ? payloadTotal : (salesResult.sales ?? 0);
+        const unitPriceToUse = payloadUnitPrice > 0 ? payloadUnitPrice : (quantity > 0 ? totalAmountToUse / quantity : 0);
+
         if (item.id) {
           // Update existing order item
           await queryRunner.manager.update(OrderItems, item.id, {
             itemId: item.itemId,
-            itemBaseId: item.itemBaseId ?? null,
-            serviceId: isNonStockService ? null : item.serviceId,
-            nonStockServiceId: isNonStockService ? item.nonStockServiceId : null,
+            itemBaseId: norm(item.itemBaseId),
+            serviceId: serviceIdVal,
+            nonStockServiceId: nonStockServiceIdVal,
             isNonStockService: isNonStockService,
             discount: parseFloat((item.discount || 0).toString()),
             level: parseFloat((item.level || 0).toString()),
@@ -659,11 +691,11 @@ export class OrdersService {
             baseCurve: item.baseCurve,
             diameter: item.diameter,
             tintColor: item.tintColor,
-            totalAmount: parseFloat((item.totalAmount || 0).toString()),
+            totalAmount: totalAmountToUse,
             adminApproval: item.adminApproval || false,
             uomId: item.uomId,
             quantity: quantity,
-            unitPrice: parseFloat((item.unitPrice || 0).toString()),
+            unitPrice: unitPriceToUse,
             description: item.description,
             isDiscounted: item.isDiscounted || false,
             status: item.status,
@@ -678,8 +710,9 @@ export class OrdersService {
           await queryRunner.manager.save(OrderItems, {
             orderId: id,
             itemId: item.itemId,
-            serviceId: isNonStockService ? null : item.serviceId,
-            nonStockServiceId: isNonStockService ? item.nonStockServiceId : null,
+            itemBaseId: norm(item.itemBaseId),
+            serviceId: serviceIdVal,
+            nonStockServiceId: nonStockServiceIdVal,
             isNonStockService: isNonStockService,
             discount: parseFloat((item.discount || 0).toString()),
             level: parseFloat((item.level || 0).toString()),
@@ -704,11 +737,11 @@ export class OrdersService {
             baseCurve: item.baseCurve,
             diameter: item.diameter,
             tintColor: item.tintColor,
-            totalAmount: parseFloat((item.totalAmount || 0).toString()),
+            totalAmount: totalAmountToUse,
             adminApproval: item.adminApproval || false,
             uomId: item.uomId,
             quantity: quantity,
-            unitPrice: parseFloat((item.unitPrice || 0).toString()),
+            unitPrice: unitPriceToUse,
             description: item.description,
             isDiscounted: item.isDiscounted || false,
             status: item.status,
@@ -720,6 +753,18 @@ export class OrdersService {
           });
         }
       }
+
+      // Recalculate order totals from current order items (same as create flow)
+      const currentItems = await queryRunner.manager.find(OrderItems, { where: { orderId: id } });
+      const recalculatedTotalAmount = currentItems.reduce((sum, oi) => sum + (oi.totalAmount || 0), 0);
+      const recalculatedTotalQuantity = currentItems.reduce((sum, oi) => sum + (oi.quantity || 0), 0);
+      const tax = parseFloat((orderData.tax || 0).toString());
+      const recalculatedGrandTotal = recalculatedTotalAmount + tax;
+      await queryRunner.manager.update(Order, id, {
+        totalAmount: recalculatedTotalAmount,
+        totalQuantity: recalculatedTotalQuantity,
+        grandTotal: recalculatedGrandTotal,
+      });
 
       // Handle payment term
       if (paymentTerm) {
@@ -951,7 +996,6 @@ export class OrdersService {
     serviceId: string | null,
     uomId: string,
     quantity: number,
-    _itemBaseId?: string | null
   ): Promise<{ unitPrice: number; unit: number; baseUomId: string }> {
     const item = await this.itemRepository.findOne({
       where: { id: itemId },
@@ -1025,7 +1069,7 @@ export class OrdersService {
       return { totalCost: 0, unit: 0, baseUomId: uomId };
     }
 
-    const { unit, baseUomId } = await this.calculateUnitForQuantity(itemId, serviceId, uomId, quantity, itemBaseId);
+    const { unit, baseUomId } = await this.calculateUnitForQuantity(itemId, serviceId, uomId, quantity);
 
     const totalCost = unit * (pricing.costPrice || 0);
     return { totalCost, unit, baseUomId };
@@ -1049,7 +1093,7 @@ export class OrdersService {
       throw new BadRequestException(`Item or unit category not found for item ${itemId}`);
     }
 
-    const { unit, baseUomId } = await this.calculateUnitForQuantity(itemId, serviceId, uomId, quantity, itemBaseId);
+    const { unit, baseUomId } = await this.calculateUnitForQuantity(itemId, serviceId, uomId, quantity);
 
     let pricing;
     if (serviceId) {
