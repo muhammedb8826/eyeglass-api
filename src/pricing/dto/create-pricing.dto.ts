@@ -4,6 +4,11 @@ export class CreatePricingDto {
     @IsString()
     itemId: string;
 
+    // Optional: price per specific base variant (eyeglass)
+    @IsOptional()
+    @IsString()
+    itemBaseId?: string;
+
     @IsOptional()
     @IsString()
     serviceId?: string;

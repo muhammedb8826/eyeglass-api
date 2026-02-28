@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { CreatePricingDto } from './dto/create-pricing.dto';
 import { UpdatePricingDto } from './dto/update-pricing.dto';
 import { Pricing } from 'src/entities/pricing.entity';
@@ -13,25 +13,49 @@ export class PricingService {
   ) {}
 
   async create(createPricingDto: CreatePricingDto) {
-    const { itemId, serviceId, nonStockServiceId, isNonStockService } = createPricingDto;
+    const { itemId, itemBaseId, serviceId, nonStockServiceId, isNonStockService } = createPricingDto;
+
+    // Normalize empty strings to undefined so we don't insert "" into uuid columns
+    const normalizedServiceId = serviceId && serviceId.trim() !== '' ? serviceId : undefined;
+    const normalizedNonStockServiceId = nonStockServiceId && nonStockServiceId.trim() !== '' ? nonStockServiceId : undefined;
 
     // Auto-correct the isNonStockService flag based on which ID is provided
     let correctedIsNonStockService = isNonStockService;
-    if (nonStockServiceId && !serviceId) {
+    if (normalizedNonStockServiceId && !normalizedServiceId) {
       correctedIsNonStockService = true;
-    } else if (serviceId && !nonStockServiceId) {
+    } else if (normalizedServiceId && !normalizedNonStockServiceId) {
       correctedIsNonStockService = false;
     }
 
     // Check for existing pricing based on service type
     let existing;
-    if (correctedIsNonStockService && nonStockServiceId) {
+    if (correctedIsNonStockService && normalizedNonStockServiceId) {
       existing = await this.pricingRepository.findOne({
-        where: { itemId, nonStockServiceId, isNonStockService: true }
+        where: {
+          itemId,
+          ...(itemBaseId ? { itemBaseId } : { itemBaseId: IsNull() }),
+          nonStockServiceId: normalizedNonStockServiceId,
+          isNonStockService: true,
+        }
       });
-    } else if (serviceId) {
+    } else if (normalizedServiceId) {
       existing = await this.pricingRepository.findOne({
-        where: { itemId, serviceId, isNonStockService: false }
+        where: {
+          itemId,
+          ...(itemBaseId ? { itemBaseId } : { itemBaseId: IsNull() }),
+          serviceId: normalizedServiceId,
+          isNonStockService: false,
+        }
+      });
+    } else {
+      // Item-only pricing: no service IDs at all
+      existing = await this.pricingRepository.findOne({
+        where: {
+          itemId,
+          ...(itemBaseId ? { itemBaseId } : { itemBaseId: IsNull() }),
+          serviceId: IsNull(),
+          nonStockServiceId: IsNull(),
+        }
       });
     }
 
@@ -39,10 +63,19 @@ export class PricingService {
       throw new ConflictException('Pricing already exists for this item and service');
     }
 
-    // Create pricing with corrected flag
-    const pricingData = {
-      ...createPricingDto,
-      isNonStockService: correctedIsNonStockService
+    // Create pricing with corrected / normalized fields
+    const pricingData: Partial<Pricing> = {
+      itemId,
+      itemBaseId: itemBaseId || null,
+      serviceId: normalizedServiceId ?? null,
+      nonStockServiceId: normalizedNonStockServiceId ?? null,
+      isNonStockService: correctedIsNonStockService ?? false,
+      sellingPrice: createPricingDto.sellingPrice,
+      costPrice: createPricingDto.costPrice,
+      constant: createPricingDto.constant,
+      width: createPricingDto.width,
+      height: createPricingDto.height,
+      baseUomId: createPricingDto.baseUomId,
     };
 
     const pricing = this.pricingRepository.create(pricingData);
@@ -88,20 +121,25 @@ export class PricingService {
       throw new NotFoundException('Pricing not found');
     }
 
-    // Auto-correct the isNonStockService flag based on which ID is provided
-    const { serviceId, nonStockServiceId, isNonStockService } = updatePricingDto;
+    // Normalize empty strings and auto-correct the isNonStockService flag
+    const { serviceId, nonStockServiceId, isNonStockService, itemBaseId } = updatePricingDto;
+    const normalizedServiceId = serviceId && serviceId.trim() !== '' ? serviceId : undefined;
+    const normalizedNonStockServiceId = nonStockServiceId && nonStockServiceId.trim() !== '' ? nonStockServiceId : undefined;
+
     let correctedIsNonStockService = isNonStockService;
-    
-    if (nonStockServiceId && !serviceId) {
+    if (normalizedNonStockServiceId && !normalizedServiceId) {
       correctedIsNonStockService = true;
-    } else if (serviceId && !nonStockServiceId) {
+    } else if (normalizedServiceId && !normalizedNonStockServiceId) {
       correctedIsNonStockService = false;
     }
 
-    // Update with corrected flag
+    // Update with corrected / normalized fields
     const updateData = {
       ...updatePricingDto,
-      isNonStockService: correctedIsNonStockService
+      itemBaseId: itemBaseId || null,
+      serviceId: normalizedServiceId ?? null,
+      nonStockServiceId: normalizedNonStockServiceId ?? null,
+      isNonStockService: correctedIsNonStockService ?? false,
     };
 
     await this.pricingRepository.update(id, updateData);
