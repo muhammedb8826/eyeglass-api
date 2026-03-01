@@ -14,6 +14,7 @@ import { FixedCost } from 'src/entities/fixed-cost.entity';
 import { Item } from 'src/entities/item.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
+import { LabToolService } from 'src/lab-tool/lab-tool.service';
 
 @Injectable()
 export class OrdersService {
@@ -41,6 +42,7 @@ export class OrdersService {
     @InjectRepository(UnitCategory)
     private readonly unitCategoryRepository: Repository<UnitCategory>,
     private readonly dataSource: DataSource,
+    private readonly labToolService: LabToolService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto) {
@@ -234,6 +236,19 @@ export class OrdersService {
         totalQuantity: recalculatedTotalQuantity,
         grandTotal: recalculatedGrandTotal,
       });
+
+      // Ensure required lab tools (base curve) exist before order can be produced
+      const baseCurvesFromItems = orderItems
+        .map(oi => oi.baseCurve)
+        .filter((bc): bc is number => bc != null && !Number.isNaN(bc));
+      if (baseCurvesFromItems.length > 0) {
+        const { missing } = await this.labToolService.checkAvailabilityForBaseCurves(baseCurvesFromItems);
+        if (missing.length > 0) {
+          throw new BadRequestException(
+            `Cannot produce order: no lab tool available for base curve(s) ${missing.join(', ')}. Add or restock these tools.`,
+          );
+        }
+      }
 
       // Stock reduction is now handled when status changes to "Printed" in the order items service
       // Removed stock reduction from order creation
@@ -765,6 +780,19 @@ export class OrdersService {
         totalQuantity: recalculatedTotalQuantity,
         grandTotal: recalculatedGrandTotal,
       });
+
+      // Ensure required lab tools (base curve) exist before order can be produced
+      const baseCurvesFromItems = currentItems
+        .map(oi => oi.baseCurve)
+        .filter((bc): bc is number => bc != null && !Number.isNaN(bc));
+      if (baseCurvesFromItems.length > 0) {
+        const { missing } = await this.labToolService.checkAvailabilityForBaseCurves(baseCurvesFromItems);
+        if (missing.length > 0) {
+          throw new BadRequestException(
+            `Cannot produce order: no lab tool available for base curve(s) ${missing.join(', ')}. Add or restock these tools.`,
+          );
+        }
+      }
 
       // Handle payment term
       if (paymentTerm) {

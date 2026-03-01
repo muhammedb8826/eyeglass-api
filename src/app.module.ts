@@ -36,6 +36,7 @@ import { CommissionTransactionsModule } from './commission-transactions/commissi
 import { PricingModule } from './pricing/pricing.module';
 import { OrderItemNotesModule } from './order-item-notes/order-item-notes.module';
 import { DiscountsModule } from './discounts/discounts.module';
+import { LabToolModule } from './lab-tool/lab-tool.module';
 import { ContactModule } from './contact/contact.module';
 import { AccountModule } from './account/account.module';
 
@@ -82,6 +83,7 @@ import configuration from './config/configuration';
     CommissionTransactionsModule,
     DiscountsModule,
     FileModule,
+    LabToolModule,
     ItemsModule,
     MachinesModule,
     BincardModule,

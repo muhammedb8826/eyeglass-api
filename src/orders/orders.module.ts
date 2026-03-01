@@ -13,9 +13,11 @@ import { FixedCost } from 'src/entities/fixed-cost.entity';
 import { Item } from 'src/entities/item.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
+import { LabToolModule } from 'src/lab-tool/lab-tool.module';
 
 @Module({
   imports: [
+    LabToolModule,
     TypeOrmModule.forFeature([
       Order, 
       Pricing, 

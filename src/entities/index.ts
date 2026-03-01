@@ -29,4 +29,5 @@ export * from './uom.entity';
 export * from './user-machine.entity';
 export * from './user.entity';
 export * from './vendor.entity';
-export * from './file-path.entity'; 
+export * from './file-path.entity';
+export * from './lab-tool.entity';

@@ -5,6 +5,7 @@ import { UnitCategory } from './entities/unit-category.entity';
 import { UOM } from './entities/uom.entity';
 import { Item } from './entities/item.entity';
 import { ItemBase } from './entities/item-base.entity';
+import { LabTool } from './entities/lab-tool.entity';
 import { Machine } from './entities/machine.entity';
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
@@ -28,6 +29,7 @@ async function seed() {
     const uomRepository = AppDataSource.getRepository(UOM);
     const itemRepository = AppDataSource.getRepository(Item);
     const itemBaseRepository = AppDataSource.getRepository(ItemBase);
+    const labToolRepository = AppDataSource.getRepository(LabTool);
     const machineRepository = AppDataSource.getRepository(Machine);
 
     // Seed Admin User
@@ -265,6 +267,41 @@ async function seed() {
           addPower: row.addPower,
         });
         console.log(`Item base ${row.itemCode}(${row.baseCode}^+${row.addPower}) created`);
+      }
+    }
+
+    // Seed Lab Tools (base curve blocks) – required for producing orders with base curve
+    const labToolsData = [
+      { code: '000', baseCurveMin: 0, baseCurveMax: 0, quantity: 1 },
+      { code: '100-100', baseCurveMin: 100, baseCurveMax: 100, quantity: 1 },
+      { code: '100-200', baseCurveMin: 100, baseCurveMax: 200, quantity: 1 },
+      { code: '125', baseCurveMin: 125, baseCurveMax: 125, quantity: 1 },
+      { code: '125-150', baseCurveMin: 125, baseCurveMax: 150, quantity: 1 },
+      { code: '125-225', baseCurveMin: 125, baseCurveMax: 225, quantity: 1 },
+      { code: '150', baseCurveMin: 150, baseCurveMax: 150, quantity: 1 },
+      { code: '150-250', baseCurveMin: 150, baseCurveMax: 250, quantity: 1 },
+      { code: '175', baseCurveMin: 175, baseCurveMax: 175, quantity: 1 },
+      { code: '200', baseCurveMin: 200, baseCurveMax: 200, quantity: 1 },
+      { code: '200-300', baseCurveMin: 200, baseCurveMax: 300, quantity: 1 },
+      { code: '225', baseCurveMin: 225, baseCurveMax: 225, quantity: 1 },
+      { code: '225-275', baseCurveMin: 225, baseCurveMax: 275, quantity: 2 },
+      { code: '225-475', baseCurveMin: 225, baseCurveMax: 475, quantity: 1 },
+      { code: '237', baseCurveMin: 237, baseCurveMax: 237, quantity: 1 },
+      { code: '250', baseCurveMin: 250, baseCurveMax: 250, quantity: 1 },
+      { code: '250-450', baseCurveMin: 250, baseCurveMax: 450, quantity: 7 },
+      { code: '275', baseCurveMin: 275, baseCurveMax: 275, quantity: 1 },
+      { code: '287', baseCurveMin: 287, baseCurveMax: 287, quantity: 1 },
+      { code: '300', baseCurveMin: 300, baseCurveMax: 300, quantity: 1 },
+      { code: '300-350', baseCurveMin: 300, baseCurveMax: 350, quantity: 1 },
+      { code: '300-550', baseCurveMin: 300, baseCurveMax: 550, quantity: 1 },
+    ];
+    for (const row of labToolsData) {
+      const existing = await labToolRepository.findOne({
+        where: { code: row.code },
+      });
+      if (!existing) {
+        await labToolRepository.save(row);
+        console.log(`Lab tool ${row.code} (${row.baseCurveMin}-${row.baseCurveMax}) created`);
       }
     }
 
