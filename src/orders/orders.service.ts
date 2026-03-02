@@ -12,6 +12,7 @@ import { Commission } from 'src/entities/commission.entity';
 import { CommissionTransaction } from 'src/entities/commission-transaction.entity';
 import { FixedCost } from 'src/entities/fixed-cost.entity';
 import { Item } from 'src/entities/item.entity';
+import { ItemBase } from 'src/entities/item-base.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolService } from 'src/lab-tool/lab-tool.service';
@@ -37,6 +38,8 @@ export class OrdersService {
     private readonly fixedCostRepository: Repository<FixedCost>,
     @InjectRepository(Item)
     private readonly itemRepository: Repository<Item>,
+    @InjectRepository(ItemBase)
+    private readonly itemBaseRepository: Repository<ItemBase>,
     @InjectRepository(UOM)
     private readonly uomRepository: Repository<UOM>,
     @InjectRepository(UnitCategory)
@@ -44,6 +47,103 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     private readonly labToolService: LabToolService,
   ) {}
+
+  private async ensureLabToolsAvailableForOrderItems(orderItems: OrderItems[]): Promise<void> {
+    if (!orderItems.length) return;
+
+    const itemBaseIds = Array.from(
+      new Set(
+        orderItems
+          .map(oi => oi.itemBaseId)
+          .filter((id): id is string => !!id),
+      ),
+    );
+
+    const baseMap = new Map<string, ItemBase>();
+    if (itemBaseIds.length > 0) {
+      const bases = await this.itemBaseRepository.find({
+        where: { id: In(itemBaseIds) },
+      });
+      for (const b of bases) {
+        baseMap.set(b.id, b);
+      }
+    }
+
+    const toolValues: number[] = [];
+
+    for (const oi of orderItems) {
+      if (!oi.itemBaseId) continue;
+      const base = baseMap.get(oi.itemBaseId);
+      if (!base || !base.baseCode) continue;
+
+      const baseCodeNum = parseFloat(base.baseCode);
+      if (Number.isNaN(baseCodeNum)) continue;
+
+      // BaseTool is base code plus ADD in 0.25D steps (e.g. 350 + 25 = 375 for 350^+2.5)
+      const addTool = base.addPower ? Math.round(base.addPower * 10) : 0;
+      const baseTool = baseCodeNum + addTool;
+
+      const valuesTool: number[] = [];
+
+      const addEyeValues = (
+        sphere: number | null,
+        cylinder: number | null,
+      ) => {
+        if (sphere === null || sphere === undefined) {
+          return;
+        }
+
+        const sphMagTool = Math.round(Math.abs(sphere) * 100); // diopters -> tool units
+        let sphTool = baseTool;
+        if (sphere < 0) {
+          sphTool = baseTool + sphMagTool;
+        } else if (sphere > 0) {
+          sphTool = baseTool - sphMagTool;
+        }
+        valuesTool.push(sphTool);
+
+        if (cylinder === null || cylinder === undefined) {
+          return;
+        }
+
+        const cylAbs = Math.abs(cylinder);
+        let cylToolMag: number;
+
+        // Frontend may send cylinder as tool units (e.g. 325) or diopters (e.g. 3.25)
+        if (Number.isInteger(cylAbs) && cylAbs >= 25 && cylAbs % 25 === 0) {
+          cylToolMag = cylAbs;
+        } else {
+          cylToolMag = Math.round(cylAbs * 100);
+        }
+
+        const cylTool = sphTool + cylToolMag;
+        valuesTool.push(cylTool);
+      };
+
+      addEyeValues(oi.sphereRight, oi.cylinderRight);
+      addEyeValues(oi.sphereLeft, oi.cylinderLeft);
+
+      for (const v of valuesTool) {
+        if (Number.isFinite(v)) {
+          toolValues.push(v);
+        }
+      }
+    }
+
+    if (toolValues.length === 0) {
+      // Nothing to validate (no bases or no Rx on any items)
+      return;
+    }
+
+    const { missing } = await this.labToolService.checkAvailabilityForBaseCurves(toolValues);
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Cannot produce order: no lab tool available for calculated base/tool value(s) ${missing.join(
+          ', ',
+        )}. Add or restock these tools.`,
+      );
+    }
+  }
 
   async create(createOrderDto: CreateOrderDto) {
     // Validate required fields
@@ -237,18 +337,8 @@ export class OrdersService {
         grandTotal: recalculatedGrandTotal,
       });
 
-      // Ensure required lab tools (base curve) exist before order can be produced
-      const baseCurvesFromItems = orderItems
-        .map(oi => oi.baseCurve)
-        .filter((bc): bc is number => bc != null && !Number.isNaN(bc));
-      if (baseCurvesFromItems.length > 0) {
-        const { missing } = await this.labToolService.checkAvailabilityForBaseCurves(baseCurvesFromItems);
-        if (missing.length > 0) {
-          throw new BadRequestException(
-            `Cannot produce order: no lab tool available for base curve(s) ${missing.join(', ')}. Add or restock these tools.`,
-          );
-        }
-      }
+      // Ensure required lab tools (based on Rx + base) exist before order can be produced
+      await this.ensureLabToolsAvailableForOrderItems(orderItems);
 
       // Stock reduction is now handled when status changes to "Printed" in the order items service
       // Removed stock reduction from order creation
@@ -781,18 +871,8 @@ export class OrdersService {
         grandTotal: recalculatedGrandTotal,
       });
 
-      // Ensure required lab tools (base curve) exist before order can be produced
-      const baseCurvesFromItems = currentItems
-        .map(oi => oi.baseCurve)
-        .filter((bc): bc is number => bc != null && !Number.isNaN(bc));
-      if (baseCurvesFromItems.length > 0) {
-        const { missing } = await this.labToolService.checkAvailabilityForBaseCurves(baseCurvesFromItems);
-        if (missing.length > 0) {
-          throw new BadRequestException(
-            `Cannot produce order: no lab tool available for base curve(s) ${missing.join(', ')}. Add or restock these tools.`,
-          );
-        }
-      }
+      // Ensure required lab tools (based on Rx + base) exist before order can be produced
+      await this.ensureLabToolsAvailableForOrderItems(currentItems);
 
       // Handle payment term
       if (paymentTerm) {

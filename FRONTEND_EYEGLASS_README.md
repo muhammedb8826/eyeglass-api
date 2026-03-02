@@ -203,6 +203,38 @@ Backend will persist these values and return them in:
 
 You can display them in Rx detail views, job tickets, and production UIs.
 
+### 4.4 Lab tools – automatic check from Rx + base
+
+For items that have **bases** (see §5.2) and a prescription on the order item, the backend automatically checks that the lab has the right **tool blocks** before it accepts the order.
+
+For each order item with:
+
+- a chosen `itemBaseId` (e.g. 350+25, 575+25, 400+25, 800+75), and
+- Rx fields (`sphereRight/Left`, `cylinderRight/Left`),
+
+the backend computes tool values as:
+
+- Right eye  
+  - `R_SPH_val = Base + R_SPH`  
+  - `R_CYL_val = R_SPH_val + R_CYL`
+- Left eye  
+  - `L_SPH_val = Base + L_SPH`  
+  - `L_CYL_val = L_SPH_val + L_CYL`
+
+Where:
+
+- **Base** comes from `ItemBase.baseCode` (e.g. `"350"` → 3.50 D).  
+- SPH / CYL are in diopters as sent in the Rx fields.
+
+These four values (where present) are converted to the **tool scale** (100× diopters, e.g. 1.25 D → 125) and checked against the `lab-tools` table. If **any** value has no matching lab tool (range) with `quantity > 0`, the order **POST/PATCH** fails with:
+
+> `Cannot produce order: no lab tool available for calculated base/tool value(s) ...`
+
+The frontend **does not need to send any extra fields** for this check:
+
+- Just send `itemId`, optional `itemBaseId`, and Rx (SPH/CYL).  
+- The backend does the Rx + base calculation and tool validation automatically.
+
 ---
 
 ## 5. Item (Lens Blank) Metadata

@@ -11,6 +11,7 @@ import { Commission } from 'src/entities/commission.entity';
 import { CommissionTransaction } from 'src/entities/commission-transaction.entity';
 import { FixedCost } from 'src/entities/fixed-cost.entity';
 import { Item } from 'src/entities/item.entity';
+import { ItemBase } from 'src/entities/item-base.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolModule } from 'src/lab-tool/lab-tool.module';
@@ -28,6 +29,7 @@ import { LabToolModule } from 'src/lab-tool/lab-tool.module';
       CommissionTransaction,
       FixedCost,
       Item,
+      ItemBase,
       UOM,
       UnitCategory
     ])
