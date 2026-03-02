@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike, IsNull } from 'typeorm';
 import { CreateItemDto } from './dto/create-item.dto';
+import { CreateItemBaseDto } from './dto/create-item-base.dto';
+import { UpdateItemBaseDto } from './dto/update-item-base.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { Item } from '../entities/item.entity';
 import { ItemBase } from '../entities/item-base.entity';
@@ -141,6 +143,28 @@ export class ItemsService {
     return item;
   }
 
+  /** Add a base variant for an item (e.g. 3221: 350+25 → baseCode "350", addPower 2.5). */
+  async addBase(itemId: string, dto: CreateItemBaseDto): Promise<ItemBase> {
+    const item = await this.itemRepository.findOne({ where: { id: itemId } });
+    if (!item) {
+      throw new NotFoundException(`Item with ID ${itemId} not found`);
+    }
+    const existing = await this.itemBaseRepository.findOne({
+      where: { itemId, baseCode: dto.baseCode.trim(), addPower: dto.addPower },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `This item already has a base with baseCode "${dto.baseCode}" and addPower ${dto.addPower}`,
+      );
+    }
+    const base = this.itemBaseRepository.create({
+      itemId,
+      baseCode: dto.baseCode.trim(),
+      addPower: dto.addPower,
+    });
+    return this.itemBaseRepository.save(base);
+  }
+
   /** Get bases for an item (e.g. 3221 → 350^+2.5, 575^+2.5). Returns empty array if item has no bases. */
   async findBasesByItemId(itemId: string) {
     const item = await this.itemRepository.findOne({ where: { id: itemId } });
@@ -151,6 +175,38 @@ export class ItemsService {
       where: { itemId },
       order: { baseCode: 'ASC', addPower: 'ASC' },
     });
+  }
+
+  /** Update a base variant for an item. */
+  async updateBase(itemId: string, baseId: string, dto: UpdateItemBaseDto): Promise<ItemBase> {
+    const base = await this.itemBaseRepository.findOne({ where: { id: baseId, itemId } });
+    if (!base) {
+      throw new NotFoundException(`Base with ID ${baseId} for this item not found`);
+    }
+    if (dto.baseCode !== undefined) {
+      base.baseCode = dto.baseCode.trim();
+    }
+    if (dto.addPower !== undefined) {
+      base.addPower = dto.addPower;
+    }
+    const existing = await this.itemBaseRepository.findOne({
+      where: { itemId, baseCode: base.baseCode, addPower: base.addPower },
+    });
+    if (existing && existing.id !== baseId) {
+      throw new ConflictException(
+        `This item already has a base with baseCode "${base.baseCode}" and addPower ${base.addPower}`,
+      );
+    }
+    return this.itemBaseRepository.save(base);
+  }
+
+  /** Delete a base variant from an item. Fails if pricing or order items reference this base (DB constraint). */
+  async deleteBase(itemId: string, baseId: string): Promise<void> {
+    const base = await this.itemBaseRepository.findOne({ where: { id: baseId, itemId } });
+    if (!base) {
+      throw new NotFoundException(`Base with ID ${baseId} for this item not found`);
+    }
+    await this.itemBaseRepository.delete(baseId);
   }
 
   /**

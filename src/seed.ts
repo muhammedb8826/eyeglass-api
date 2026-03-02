@@ -210,6 +210,13 @@ async function seed() {
         lensMaterial: 'PLASTIC',
         lensIndex: 1.5,
       },
+      {
+        itemCode: '1322',
+        name: 'SV plastic white',
+        lensType: 'SINGLE_VISION',
+        lensMaterial: 'PLASTIC',
+        lensIndex: 1.5,
+      },
     ];
 
     for (const lensItem of lensItemsData) {
@@ -245,7 +252,7 @@ async function seed() {
       }
     }
 
-    // Seed item bases: 3221(350^+25, 575^+25), 1311(400^+25, 600^+25, 800^+75, 1000^+75)
+    // Seed item bases: 3221(350+25, 575+25), 1311 & 1322(400+25, 600+25, 800+75, 1000+75)
     const itemBasesData: { itemCode: string; baseCode: string; addPower: number }[] = [
       { itemCode: '3221', baseCode: '350', addPower: 2.5 },
       { itemCode: '3221', baseCode: '575', addPower: 2.5 },
@@ -253,6 +260,10 @@ async function seed() {
       { itemCode: '1311', baseCode: '600', addPower: 2.5 },
       { itemCode: '1311', baseCode: '800', addPower: 7.5 },
       { itemCode: '1311', baseCode: '1000', addPower: 7.5 },
+      { itemCode: '1322', baseCode: '400', addPower: 2.5 },
+      { itemCode: '1322', baseCode: '600', addPower: 2.5 },
+      { itemCode: '1322', baseCode: '800', addPower: 7.5 },
+      { itemCode: '1322', baseCode: '1000', addPower: 7.5 },
     ];
     for (const row of itemBasesData) {
       const item = await itemRepository.findOne({ where: { itemCode: row.itemCode } });
