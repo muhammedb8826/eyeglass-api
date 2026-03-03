@@ -111,7 +111,7 @@ async function seed() {
       });
 
       if (!existingFixedCost) {
-        await fixedCostRepository.save(fixedCostData);
+        await fixedCostRepository.save({ ...fixedCostData, id: randomUUID() });
         console.log(`Fixed cost "${fixedCostData.description}" created successfully`);
       } else {
         console.log(`Fixed cost "${fixedCostData.description}" already exists`);
@@ -124,6 +124,7 @@ async function seed() {
     });
     if (!defaultMachine) {
       defaultMachine = await machineRepository.save({
+        id: randomUUID(),
         name: 'Default Machine',
         status: true,
         description: 'Default production machine for lens items',
@@ -139,6 +140,7 @@ async function seed() {
     });
     if (!pieceCategory) {
       pieceCategory = await unitCategoryRepository.save({
+        id: randomUUID(),
         name: 'Piece',
         description: 'Countable items (pcs)',
       });
@@ -157,6 +159,7 @@ async function seed() {
     });
     if (!pcsUom) {
       pcsUom = await uomRepository.save({
+        id: randomUUID(),
         name: 'Piece',
         abbreviation: 'pcs',
         conversionRate: 1,
@@ -231,6 +234,7 @@ async function seed() {
 
       if (!existingItem) {
         await itemRepository.save({
+          id: randomUUID(),
           itemCode: lensItem.itemCode,
           name: lensItem.name,
           description: lensItem.lensType,
@@ -275,6 +279,7 @@ async function seed() {
       });
       if (!existing) {
         await itemBaseRepository.save({
+          id: randomUUID(),
           itemId: item.id,
           baseCode: row.baseCode,
           addPower: row.addPower,
@@ -313,7 +318,7 @@ async function seed() {
         where: { code: row.code },
       });
       if (!existing) {
-        await labToolRepository.save(row);
+        await labToolRepository.save({ ...row, id: randomUUID() });
         console.log(`Lab tool ${row.code} (${row.baseCurveMin}-${row.baseCurveMax}) created`);
       }
     }
