@@ -8,6 +8,7 @@ import { ItemBase } from './entities/item-base.entity';
 import { LabTool } from './entities/lab-tool.entity';
 import { Machine } from './entities/machine.entity';
 import * as bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from './config/database.config';
 
@@ -32,8 +33,9 @@ async function seed() {
     const labToolRepository = AppDataSource.getRepository(LabTool);
     const machineRepository = AppDataSource.getRepository(Machine);
 
-    // Seed Admin User
+    // Seed Admin User (User entity uses @PrimaryColumn('uuid') + BeforeInsert setId; seed must set id when saving plain object)
     const adminData = {
+      id: randomUUID(),
       first_name: "EYEGLASS",
       middle_name: "EYEGLASS",
       last_name: "ADMIN",
@@ -48,8 +50,8 @@ async function seed() {
       is_active: true,
     };
 
-    const existingUser = await userRepository.findOne({ 
-      where: { email: adminData.email } 
+    const existingUser = await userRepository.findOne({
+      where: { email: adminData.email }
     });
 
     if (!existingUser) {
