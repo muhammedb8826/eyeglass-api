@@ -56,22 +56,22 @@ export class UsersService {
     }
   }
 
-  async findAllUsers() {
+  async findAllUsers(): Promise<User[]> {
     const users = await this.userRepository.find();
-    return users.map(user => ({
-      ...user,
-      profile: user.profile ? `/uploads/profile/${user.profile}` : null,
-    }));
+    users.forEach(user => {
+      user.profile = user.profile ? `/uploads/profile/${user.profile}` : null;
+    });
+    return users;
   }
 
-  async getUserByRole(role: Role) {
+  async getUserByRole(role: Role): Promise<User[]> {
     const users = await this.userRepository.find({
       where: { roles: role },
     });
-    return users.map(user => ({
-      ...user,
-      profile: user.profile ? `/uploads/profile/${user.profile}` : null,
-    }));
+    users.forEach(user => {
+      user.profile = user.profile ? `/uploads/profile/${user.profile}` : null;
+    });
+    return users;
   }
 
   async findOne(id: string) {
