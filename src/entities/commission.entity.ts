@@ -1,12 +1,20 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, OneToMany, ManyToOne } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, OneToMany, ManyToOne, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Order } from './order.entity';
 import { SalesPartner } from './sales-partner.entity';
 import { CommissionTransaction } from './commission-transaction.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('commissions')
 export class Commission {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column({ unique: true })
   orderId: string;

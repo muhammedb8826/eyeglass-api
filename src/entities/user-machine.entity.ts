@@ -1,12 +1,20 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, Unique, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { User } from './user.entity';
 import { Machine } from './machine.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('user_machine')
 @Unique(['userId', 'machineId'])
 export class UserMachine {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column()
   userId: string;

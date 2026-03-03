@@ -1,13 +1,21 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, PrimaryColumn, BeforeInsert } from 'typeorm';
 import { Item } from './item.entity';
 import { Sale } from './sale.entity';
 import { UOM } from './uom.entity';
 import { SalesItemNote } from './sales-item-note.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('sale_items')
 export class SaleItems {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column()
   saleId: string;

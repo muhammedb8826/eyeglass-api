@@ -1,12 +1,20 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, Column, OneToMany, CreateDateColumn, UpdateDateColumn, ManyToMany, JoinTable, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Pricing } from './pricing.entity';
 import { OrderItems } from './order-item.entity';
 import { Item } from './item.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('services')
 export class Service {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column({ unique: true })
   name: string;

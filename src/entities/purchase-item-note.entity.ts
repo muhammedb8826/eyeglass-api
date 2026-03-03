@@ -1,13 +1,21 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn, Index } from 'typeorm';
+import { Entity, Column, CreateDateColumn, ManyToOne, JoinColumn, Index, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { PurchaseItems } from './purchase-item.entity';
 import { User } from './user.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('purchase_item_note')
 @Index(['purchaseItemId'])
 @Index(['userId'])
 export class PurchaseItemNote {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column()
   text: string;

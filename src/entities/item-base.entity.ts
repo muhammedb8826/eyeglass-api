@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinColumn, Unique } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinColumn, Unique, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Item } from './item.entity';
 import { OrderItems } from './order-item.entity';
 import { Pricing } from './pricing.entity';
+import { randomUUID } from 'crypto';
 
 /**
  * One item code (material) can have multiple bases, each with an add power.
@@ -13,8 +14,15 @@ import { Pricing } from './pricing.entity';
 @Entity('item_bases')
 @Unique(['itemId', 'baseCode', 'addPower'])
 export class ItemBase {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  } 
 
   @Column()
   itemId: string;

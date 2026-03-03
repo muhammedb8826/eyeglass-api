@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinTable, JoinColumn, ManyToMany } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinTable, JoinColumn, ManyToMany, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Machine } from './machine.entity';
 import { UOM } from './uom.entity';
 import { UnitCategory } from './unit-category.entity';
@@ -11,11 +11,19 @@ import { PurchaseItems } from './purchase-item.entity';
 import { SaleItems } from './sale-item.entity';
 import { Discount } from './discount.entity';
 import { Service } from './service.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('items')
 export class Item {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column({ nullable: true, unique: true })
   itemCode: string;

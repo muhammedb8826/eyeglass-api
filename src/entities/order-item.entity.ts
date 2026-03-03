@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Item } from './item.entity';
 import { ItemBase } from './item-base.entity';
 import { Order } from './order.entity';
@@ -7,11 +7,19 @@ import { UOM } from './uom.entity';
 import { Service } from './service.entity';
 import { NonStockService } from './non-stock-service.entity';
 import { OrderItemNotes } from './order-item-notes.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('order_items')
 export class OrderItems {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column()
   orderId: string;

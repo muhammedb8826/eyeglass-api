@@ -1,10 +1,12 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
+  BeforeInsert,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { randomUUID } from 'crypto';
 
 /**
  * Lab tools (e.g. base curve blocks) required for producing lens orders.
@@ -14,8 +16,15 @@ import {
  */
 @Entity('lab_tools')
 export class LabTool {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   /** Display code, e.g. "125-150" or "250" (optional, for reference) */
   @Column({ nullable: true })

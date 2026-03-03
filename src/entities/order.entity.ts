@@ -1,14 +1,22 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Customer } from './customer.entity';
 import { SalesPartner } from './sales-partner.entity';
 import { PaymentTerm } from './payment-term.entity';
 import { Commission } from './commission.entity';
 import { OrderItems } from './order-item.entity';
+import { randomUUID } from 'crypto';
 
 @Entity('orders')
 export class Order {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  } 
 
   @Column()
   series: string;

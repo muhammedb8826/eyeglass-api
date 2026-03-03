@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, OneToMany, CreateDateColumn, UpdateDateColumn, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { OrderItemNotes } from './order-item-notes.entity';
 import { PurchaseItemNote } from './purchase-item-note.entity';
 import { SalesItemNote } from './sales-item-note.entity';
@@ -6,12 +6,20 @@ import { UserMachine } from './user-machine.entity';
 import { Purchase } from './purchase.entity';
 import { Sale } from './sale.entity';
 import { Role } from '../enums/role.enum';
+import { randomUUID } from 'crypto';
 
 
 @Entity('user')
 export class User {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column({ unique: true })
   email: string;

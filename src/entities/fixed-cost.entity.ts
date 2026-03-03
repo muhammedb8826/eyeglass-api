@@ -1,10 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Unique } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, Unique, BeforeInsert, PrimaryColumn } from 'typeorm';
 
 @Entity('fixed_cost')
 @Unique(['description'])
 export class FixedCost {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn('uuid')
   id: string;
+
+  @BeforeInsert()
+  setId() {
+    if (!this.id) {
+      this.id = randomUUID();
+    }
+  }
 
   @Column('float')
   monthlyFixedCost: number;
