@@ -92,9 +92,10 @@ Send `quantityRight` and/or `quantityLeft` in create/update payloads when you wa
 | `npm run test`     | Unit tests                    |
 | `npm run test:e2e` | E2E tests                     |
 
-## API and frontend
+## API and documentation
 
 - **Frontend integration:** See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md) for base URL, auth, and endpoint usage.
+- **Eyeglass backend (developer guide):** See [EYEGLASS_BACKEND_DEVELOPER_GUIDE.md](EYEGLASS_BACKEND_DEVELOPER_GUIDE.md) for prescription model, quantity per eye, lens items/bases, lab tools, and producibility checks.
 - **Response types:** See [RESPONSE_TYPES_SUMMARY.md](RESPONSE_TYPES_SUMMARY.md) if present.
 
 ## License

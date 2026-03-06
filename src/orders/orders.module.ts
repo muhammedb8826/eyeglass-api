@@ -36,5 +36,6 @@ import { LabToolModule } from 'src/lab-tool/lab-tool.module';
   ],
   controllers: [OrdersController],
   providers: [OrdersService],
+  exports: [OrdersService],
 })
 export class OrdersModule {}

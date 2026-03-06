@@ -9,6 +9,7 @@ import { OperatorStock } from 'src/entities/operator-stock.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
 import { BincardService } from 'src/bincard/bincard.service';
 import type { RecordBincardMovementDto } from 'src/bincard/bincard.service';
+import { OrdersService } from 'src/orders/orders.service';
 
 @Injectable()
 export class OrderItemsService {
@@ -23,6 +24,7 @@ export class OrderItemsService {
     private readonly paymentTermRepository: Repository<PaymentTerm>,
     private readonly dataSource: DataSource,
     private readonly bincardService: BincardService,
+    private readonly ordersService: OrdersService,
   ) {}
 
   async create(createOrderItemDto: CreateOrderItemDto) {
@@ -323,6 +325,12 @@ export class OrderItemsService {
 
       // Update order status based on all order items
       await this.updateOrderStatus(updateOrderItemDto.orderId, queryRunner);
+
+      // Re-validate lab tools for the whole order (per-eye: only eyes with quantityRight/quantityLeft > 0)
+      const orderItemsForCheck = await queryRunner.manager.find(OrderItems, {
+        where: { orderId: updateOrderItemDto.orderId },
+      });
+      await this.ordersService.ensureLabToolsAvailableForOrderItems(orderItemsForCheck);
 
       await queryRunner.commitTransaction();
 

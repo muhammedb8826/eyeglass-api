@@ -48,7 +48,12 @@ export class OrdersService {
     private readonly labToolService: LabToolService,
   ) {}
 
-  private async ensureLabToolsAvailableForOrderItems(orderItems: OrderItems[]): Promise<void> {
+  /**
+   * Validates that all order items with itemBaseId and Rx have lab tools available for the
+   * tool values derived from Rx + base. Only checks the eye(s) being produced (quantityRight > 0, quantityLeft > 0).
+   * Public so OrderItemsService can call it after PATCH order-items/:id.
+   */
+  async ensureLabToolsAvailableForOrderItems(orderItems: OrderItems[]): Promise<void> {
     if (!orderItems.length) return;
 
     const itemBaseIds = Array.from(
@@ -120,8 +125,15 @@ export class OrdersService {
         valuesTool.push(cylTool);
       };
 
-      addEyeValues(oi.sphereRight, oi.cylinderRight);
-      addEyeValues(oi.sphereLeft, oi.cylinderLeft);
+      // Per-eye producibility: only require lab tools for the eye(s) being produced (quantityRight / quantityLeft)
+      const qtyRight = Number(oi.quantityRight ?? (oi.quantity ?? 0));
+      const qtyLeft = Number(oi.quantityLeft ?? 0);
+      if (qtyRight > 0) {
+        addEyeValues(oi.sphereRight, oi.cylinderRight);
+      }
+      if (qtyLeft > 0) {
+        addEyeValues(oi.sphereLeft, oi.cylinderLeft);
+      }
 
       for (const v of valuesTool) {
         if (Number.isFinite(v)) {
