@@ -181,9 +181,9 @@ export class OrderItemsService {
         throw new NotFoundException('Order item not found');
       }
 
-      // Handle stock reduction for Printed or Void status (only when status changes to these states)
-      if ((updateOrderItemDto.status === 'Printed' || updateOrderItemDto.status === 'Void') &&
-          currentOrderItem.status !== 'Printed' && currentOrderItem.status !== 'Void' &&
+      // Handle stock reduction for InProgress or Cancelled (only when status changes to these states)
+      if ((updateOrderItemDto.status === 'InProgress' || updateOrderItemDto.status === 'Cancelled') &&
+          currentOrderItem.status !== 'InProgress' && currentOrderItem.status !== 'Cancelled' &&
           !currentOrderItem.isNonStockService) {
         const operatorStock = await this.operatorStockRepository.findOne({
           where: { itemId: currentOrderItem.itemId },
@@ -210,14 +210,14 @@ export class OrderItemsService {
           balanceAfter: newQuantity,
           referenceType: 'ORDER',
           referenceId: currentOrderItem.orderId,
-          description: `Order item printed/void – stock reduced`,
+          description: `Order item InProgress/Cancelled – stock reduced`,
           uomId: operatorStock.uomId,
         };
       }
 
-      // Handle stock restoration when status changes from Printed/Void to other states
-      if ((currentOrderItem.status === 'Printed' || currentOrderItem.status === 'Void') &&
-          updateOrderItemDto.status !== 'Printed' && updateOrderItemDto.status !== 'Void' &&
+      // Handle stock restoration when status changes from InProgress/Cancelled to other states
+      if ((currentOrderItem.status === 'InProgress' || currentOrderItem.status === 'Cancelled') &&
+          updateOrderItemDto.status !== 'InProgress' && updateOrderItemDto.status !== 'Cancelled' &&
           !currentOrderItem.isNonStockService) {
         const operatorStock = await this.operatorStockRepository.findOne({
           where: { itemId: currentOrderItem.itemId },
@@ -377,20 +377,20 @@ export class OrderItemsService {
       where: { orderId },
     }));
 
-    // Check if all statuses are the same
-    const allReceived = orderItems.every(item => item.status === 'Received');
-    const allPrinted = orderItems.every(item => item.status === 'Printed');
-    const allCompleted = orderItems.every(item => item.status === 'Completed');
+    // Check if all statuses are the same (eyeglass manufacturing standard)
+    const allPending = orderItems.every(item => item.status === 'Pending');
+    const allInProgress = orderItems.every(item => item.status === 'InProgress');
+    const allReady = orderItems.every(item => item.status === 'Ready');
     const allDelivered = orderItems.every(item => item.status === 'Delivered');
 
-    let newOrderStatus = 'Processing'; // Default status
+    let newOrderStatus = 'Processing'; // Default when mixed statuses
 
-    if (allReceived) {
+    if (allPending) {
       newOrderStatus = 'Pending';
-    } else if (allPrinted) {
-      newOrderStatus = 'Printed';
-    } else if (allCompleted) {
-      newOrderStatus = 'Completed';
+    } else if (allInProgress) {
+      newOrderStatus = 'InProgress';
+    } else if (allReady) {
+      newOrderStatus = 'Ready';
     } else if (allDelivered) {
       newOrderStatus = 'Delivered';
     }

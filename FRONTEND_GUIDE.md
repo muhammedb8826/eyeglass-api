@@ -170,17 +170,17 @@ Requires `ADMIN` role. New password must be at least 6 characters.
 
 ---
 
-## User Roles
+## User Roles (eyeglass lens lab standard)
 
 | Role | Value |
 |------|-------|
 | User | `USER` |
 | Admin | `ADMIN` |
 | Reception | `RECEPTION` |
-| Graphic Designer | `GRAPHIC_DESIGNER` |
+| Lab Technician | `LAB_TECHNICIAN` |
 | Operator | `OPERATOR` |
 | Finance | `FINANCE` |
-| Store Representative | `STORE_REPRESENTATIVE` |
+| Dispenser | `DISPENSER` |
 | Purchaser | `PURCHASER` |
 
 ---

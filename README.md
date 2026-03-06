@@ -79,6 +79,14 @@ Order line items support **per-eye quantity** so right and left lenses can be pr
 
 Send `quantityRight` and/or `quantityLeft` in create/update payloads when you want per-eye quantities. If you only send `quantity`, it is treated as right-eye only (quantityRight = quantity, quantityLeft = 0).
 
+## User roles (eyeglass lens lab standard)
+
+Roles: `USER`, `ADMIN`, `RECEPTION`, `LAB_TECHNICIAN`, `OPERATOR`, `FINANCE`, `DISPENSER`, `PURCHASER`. See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md#user-roles-eyeglass-lens-lab-standard).
+
+## Order item statuses (eyeglass manufacturing)
+
+Order items use: **Pending** → **InProgress** → **Ready** → **Delivered** (or **Cancelled**). **InProgress** and **Cancelled** consume operator stock. Order status is derived from its items. See [ORDER_TO_PRODUCTION_FLOW.md](ORDER_TO_PRODUCTION_FLOW.md).
+
 ## Scripts
 
 | Command            | Description                    |

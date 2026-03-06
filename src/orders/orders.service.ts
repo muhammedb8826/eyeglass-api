@@ -361,7 +361,7 @@ export class OrdersService {
       // Ensure required lab tools (based on Rx + base) exist before order can be produced
       await this.ensureLabToolsAvailableForOrderItems(orderItems);
 
-      // Stock reduction is now handled when status changes to "Printed" in the order items service
+      // Stock reduction is now handled when status changes to "InProgress" in the order items service
       // Removed stock reduction from order creation
 
       // Handle payment term - support both array and object formats
@@ -1050,12 +1050,12 @@ export class OrdersService {
         throw new NotFoundException(`Order with ID ${id} not found`);
       }
 
-      // Check if all order items have "received" status
+      // Check if all order items are still Pending (not yet in production)
       if (order.orderItems && order.orderItems.length > 0) {
-        const nonReceivedItems = order.orderItems.filter(item => item.status !== 'Received');
-        if (nonReceivedItems.length > 0) {
+        const nonPendingItems = order.orderItems.filter(item => item.status !== 'Pending');
+        if (nonPendingItems.length > 0) {
           throw new ConflictException(
-            `Cannot delete order. Order items with IDs [${nonReceivedItems.map(item => item.id).join(', ')}] are not in "received" status. Order is still in process.`
+            `Cannot delete order. Order items with IDs [${nonPendingItems.map(item => item.id).join(', ')}] are not in "Pending" status. Order is already in process.`
           );
         }
       }
