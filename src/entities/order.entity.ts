@@ -64,9 +64,6 @@ export class Order {
   @Column({ nullable: true })
   commissionId: string;
 
-  @Column('simple-array')
-  fileNames: string[];
-
   @Column()
   adminApproval: boolean;
 

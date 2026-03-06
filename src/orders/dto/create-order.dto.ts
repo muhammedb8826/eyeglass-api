@@ -19,7 +19,6 @@ export class CreateOrderDto {
   grandTotal: number;
   totalQuantity: number;
   internalNote?: string;
-  fileNames: string[];
   adminApproval: boolean;
 
 

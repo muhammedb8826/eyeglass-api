@@ -76,7 +76,6 @@ Via `CreateOrderDto` / `UpdateOrderDto`:
   "grandTotal": 0,
   "totalQuantity": 0,
   "internalNote": "High-priority job",
-  "fileNames": [],
   "adminApproval": false,
   "orderItems": [
     /* see section 4 */

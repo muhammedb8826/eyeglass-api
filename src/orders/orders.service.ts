@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, BadRequestException, HttpException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In, IsNull } from 'typeorm';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -98,7 +98,12 @@ export class OrdersService {
           return;
         }
 
-        const sphMagTool = Math.round(Math.abs(sphere) * 100); // diopters -> tool units
+        const sphAbs = Math.abs(sphere);
+        // Frontend may send sphere as 0.01 diopter units (e.g. 200 = 2.00 D) or as diopters (e.g. 2.0)
+        const sphMagTool =
+          Number.isInteger(sphAbs) && sphAbs >= 0 && sphAbs <= 4000
+            ? sphAbs
+            : Math.round(sphAbs * 100);
         let sphTool = baseTool;
         if (sphere < 0) {
           sphTool = baseTool + sphMagTool;
@@ -239,7 +244,6 @@ export class OrdersService {
         grandTotal: parseFloat((createOrderDto.grandTotal || 0).toString()),
         totalQuantity: parseFloat((createOrderDto.totalQuantity || 0).toString()),
         internalNote: createOrderDto.internalNote,
-        fileNames: createOrderDto.fileNames || [],
         adminApproval: createOrderDto.adminApproval || false,
         salesPartnersId: createOrderDto.salesPartner?.id,
         prescriptionDate: createOrderDto.prescriptionDate ? new Date(createOrderDto.prescriptionDate) : null,
@@ -723,7 +727,6 @@ export class OrdersService {
         grandTotal: parseFloat((orderData.grandTotal || 0).toString()),
         totalQuantity: parseFloat((orderData.totalQuantity || 0).toString()),
         internalNote: orderData.internalNote,
-        fileNames: orderData.fileNames || [],
         adminApproval: orderData.adminApproval || false,
         salesPartnersId: salesPartner?.id,
         prescriptionDate: orderData.prescriptionDate ? new Date(orderData.prescriptionDate) : existingOrder.prescriptionDate,
@@ -1017,13 +1020,16 @@ export class OrdersService {
 
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      
-      if (error.code === 'ER_DUP_ENTRY') {
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      if (error?.code === 'ER_DUP_ENTRY') {
         throw new ConflictException('Database constraint violation occurred. Please check your data.');
       }
-      
+
       console.error('Error updating order:', error);
-      throw new BadRequestException('Failed to update order');
+      throw new BadRequestException(error?.message || 'Failed to update order');
     } finally {
       await queryRunner.release();
     }
