@@ -275,12 +275,19 @@ export class OrderItemsService {
         }
       }
 
+      const hasPerEye = updateOrderItemDto.quantityRight !== undefined || updateOrderItemDto.quantityLeft !== undefined;
+      const quantityRight = hasPerEye ? parseFloat((updateOrderItemDto.quantityRight ?? 0).toString()) : parseFloat((updateOrderItemDto.quantity ?? 0).toString());
+      const quantityLeft = hasPerEye ? parseFloat((updateOrderItemDto.quantityLeft ?? 0).toString()) : 0;
+      const quantity = quantityRight + quantityLeft;
+
       // Update the order item
       await queryRunner.manager.update(OrderItems, id, {
         orderId: updateOrderItemDto.orderId,
         itemId: updateOrderItemDto.itemId,
         itemBaseId: updateOrderItemDto.itemBaseId ?? undefined,
-        quantity: updateOrderItemDto.quantity,
+        quantity,
+        quantityRight,
+        quantityLeft,
         serviceId: updateOrderItemDto.serviceId,
         discount: parseFloat((updateOrderItemDto.discount || 0).toString()),
         level: updateOrderItemDto.level,

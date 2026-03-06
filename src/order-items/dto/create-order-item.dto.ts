@@ -82,7 +82,12 @@ export class CreateOrderItemDto {
     totalAmount: number;
     adminApproval: boolean;
     uomId: string;
+    /** Total quantity (used when per-eye quantities not provided). Otherwise quantityRight + quantityLeft. */
     quantity: number;
+    /** Quantity for right lens. Right and left can be produced separately. */
+    quantityRight?: number;
+    /** Quantity for left lens. Right and left can be produced separately. */
+    quantityLeft?: number;
     unitPrice: number;
     description?: string;
     isDiscounted: boolean;

@@ -144,7 +144,8 @@ These live alongside the existing ordering fields:
 
 - `itemId`, optional `itemBaseId`, optional `serviceId` / `nonStockServiceId`, `isNonStockService`
 - `pricingId` (optional – resolved from item + itemBase when omitted), `uomId`, `baseUomId`
-- `quantity`, `unitPrice`, `totalAmount`, `discount`, `level`, `status`, etc.
+- **Quantity (updated – per eye):** Right and left lenses can be produced separately. Send **`quantityRight`** and/or **`quantityLeft`** for per-eye quantities; the backend sets **`quantity`** = `quantityRight + quantityLeft`. If you only send **`quantity`** (legacy), it is treated as right-eye only (`quantityRight = quantity`, `quantityLeft = 0`). Order totals use the total `quantity`.
+- `unitPrice`, `totalAmount`, `discount`, `level`, `status`, etc.
 
 ### 4.3 Example order item in `orderItems[]`
 
@@ -157,6 +158,8 @@ These live alongside the existing ordering fields:
   "uomId": "uuid-of-uom",
   "baseUomId": "uuid-of-base-uom",
   "quantity": 1,
+  "quantityRight": 1,
+  "quantityLeft": 1,
   "unitPrice": 500,
   "totalAmount": 500,
   "level": 1,

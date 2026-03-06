@@ -16,7 +16,7 @@ export function getDatabaseConfig(): DatabaseConfig {
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'mame',
     database: process.env.DB_DATABASE || 'eyeglass',
-    synchronize: process.env.DB_SYNCHRONIZE !== 'false',
+    synchronize: true,
     logging: process.env.DB_LOGGING === 'true' ? true : ['error'],
     poolSize: parseInt(process.env.DB_POOL_SIZE || '10', 10),
     ssl: process.env.DB_SSL === 'true',

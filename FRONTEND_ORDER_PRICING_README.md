@@ -18,7 +18,7 @@ Each **order item** points to:
 - optional `itemBaseId` (material base variant),
 - optional `serviceId` / `nonStockServiceId`,
 - a `pricingId` (or lets the backend resolve it),
-- quantity + UOM.
+- **quantity** (updated – per eye) + UOM: send **`quantityRight`** and/or **`quantityLeft`** for per-eye quantities; the backend sets **`quantity`** = `quantityRight + quantityLeft`. If you only send **`quantity`**, it is treated as right-eye only.
 
 The backend uses the `pricing` row (item + optional base/service) to:
 
@@ -49,6 +49,8 @@ Relevant parts of the body (simplified – see `FRONTEND_EYEGLASS_README.md` for
       "uomId": "uuid-of-uom",
       "baseUomId": "uuid-of-base-uom",
       "quantity": 1,
+      "quantityRight": 1,
+      "quantityLeft": 1,
 
       "pricingId": "uuid-of-pricing (optional)",
 
@@ -117,7 +119,7 @@ For each order item:
   - `itemId` from the selected item.
   - `itemBaseId` from the selected base (if any).
   - `uomId` and `baseUomId` typically from the item/pricing (e.g. pcs).
-  - `quantity` from the user input.
+  - **Quantity (per eye):** send **`quantityRight`** and **`quantityLeft`** from the user input (right and left lens can be produced separately). The backend sets `quantity = quantityRight + quantityLeft`. Alternatively send only **`quantity`** for legacy behaviour (treated as right-eye only).
 - Either:
   - Set `pricingId` to `pricing.id` from `order-info`, **or**
   - Omit `pricingId` and rely on backend resolution.
@@ -135,7 +137,7 @@ The backend will still recompute internal `unit`, `baseUomId`, `totalCost`, and 
 
 - `PATCH /api/v1/orders/:id`
 - You can:
-  - change `quantity`, `uomId`, `itemBaseId`, or switch to another `itemId`,
+  - change `quantity`, **`quantityRight`**, **`quantityLeft`** (per-eye), `uomId`, `itemBaseId`, or switch to another `itemId`,
   - send a new `pricingId`, or omit it and let the backend re‑resolve.
 - Backend:
   - recalculates `totalCost`, `sales`, and `unit` for each updated line based on the resolved pricing.

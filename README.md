@@ -1,73 +1,102 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# Eyeglass API (IAN Backend)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS backend for the eyeglass / IAN project. REST API for orders, items, pricing, customers, sales, purchases, lab tools, and related resources.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tech stack
 
-## Description
+- **Runtime:** Node.js
+- **Framework:** NestJS
+- **ORM:** TypeORM
+- **Database:** PostgreSQL
+- **Auth:** JWT (access + refresh tokens)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Prerequisites
+
+- Node.js (v18+)
+- PostgreSQL
+- npm or yarn
 
 ## Installation
 
 ```bash
-$ npm install
+npm install
 ```
+
+## Environment
+
+Copy the template and set your values:
+
+```bash
+cp env-template.txt .env
+```
+
+Edit `.env` with at least:
+
+| Variable        | Description                          |
+|----------------|--------------------------------------|
+| `DB_HOST`      | PostgreSQL host (default `localhost`) |
+| `DB_PORT`      | PostgreSQL port (default `5432`)     |
+| `DB_USERNAME`  | Database user                        |
+| `DB_PASSWORD`  | Database password                    |
+| `DB_DATABASE`  | Database name (default `eyeglass`)   |
+| `DB_SYNCHRONIZE` | Set to `true` only for a **fresh** database so TypeORM creates the schema. Leave unset or `false` when the schema already exists (avoids "constraint already exists" errors). |
+| `JWT_SECRET`   | Secret for access tokens             |
+| `JWT_RT_SECRET`| Secret for refresh tokens            |
+
+Optional: `DB_LOGGING=true`, `DB_SSL=true`, SMTP settings for contact form, etc. See `env-template.txt`.
 
 ## Running the app
 
 ```bash
-# development
-$ npm run start
+# Development (watch mode)
+npm run start:dev
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+# Production build and run
+npm run build
+npm run start:prod
 ```
 
-## Test
+Default port: `8080`. API base path: `/api/v1`.
 
-```bash
-# unit tests
-$ npm run test
+## Database
 
-# e2e tests
-$ npm run test:e2e
+- **Schema:** TypeORM manages the schema. Use `DB_SYNCHRONIZE=true` only on a new database; then set it back to `false` or leave it unset to avoid sync errors on existing DBs.
+- **Seed:** Populates admin user, fixed costs, default machine, unit category, UOM, lens items, item bases, and lab tools:
 
-# test coverage
-$ npm run test:cov
-```
+  ```bash
+  npm run seed
+  ```
 
-## Support
+- **Migrations:** Scripts exist (`migration:run`, `migration:generate`) but migrations are not required if you use synchronize for a fresh DB. See `typeorm.config.ts` and `src/config/database.config.ts`.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Order items: per-eye quantity
 
-## Stay in touch
+Order line items support **per-eye quantity** so right and left lenses can be produced separately:
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- **quantityRight** – quantity for the right lens
+- **quantityLeft** – quantity for the left lens
+- **quantity** – total (quantityRight + quantityLeft); used for order totals and backward compatibility
+
+Send `quantityRight` and/or `quantityLeft` in create/update payloads when you want per-eye quantities. If you only send `quantity`, it is treated as right-eye only (quantityRight = quantity, quantityLeft = 0).
+
+## Scripts
+
+| Command            | Description                    |
+|--------------------|--------------------------------|
+| `npm run start`    | Start once                    |
+| `npm run start:dev`| Start in watch mode           |
+| `npm run start:prod` | Start production build      |
+| `npm run build`    | Build for production          |
+| `npm run seed`     | Run database seed             |
+| `npm run lint`     | Lint and fix                  |
+| `npm run test`     | Unit tests                    |
+| `npm run test:e2e` | E2E tests                     |
+
+## API and frontend
+
+- **Frontend integration:** See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md) for base URL, auth, and endpoint usage.
+- **Response types:** See [RESPONSE_TYPES_SUMMARY.md](RESPONSE_TYPES_SUMMARY.md) if present.
 
 ## License
 
-Nest is [MIT licensed](LICENSE).
+UNLICENSED (see `package.json`).

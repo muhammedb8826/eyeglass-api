@@ -116,8 +116,17 @@ export class OrderItems {
   @Column()
   uomId: string;
 
+  /** Total quantity (quantityRight + quantityLeft). Kept for backward compat and order totals. */
   @Column()
   quantity: number;
+
+  /** Quantity for right lens (per prescription). Right and left can be produced separately. */
+  @Column('float', { default: 0 })
+  quantityRight: number;
+
+  /** Quantity for left lens (per prescription). Right and left can be produced separately. */
+  @Column('float', { default: 0 })
+  quantityLeft: number;
 
   @Column('float')
   unitPrice: number;
@@ -172,11 +181,11 @@ export class OrderItems {
   pricing: Pricing;
 
   @ManyToOne(() => UOM, uom => uom.orderItems)
-  @JoinColumn({ name: 'uomId' })
+  @JoinColumn({ name: 'uomId', foreignKeyConstraintName: 'FK_9de9472d1a87fd106634222c1b8' })
   uom: UOM;
 
   @ManyToOne(() => UOM, baseUom => baseUom.baseOrderItems)
-  @JoinColumn({ name: 'baseUomId' })
+  @JoinColumn({ name: 'baseUomId', foreignKeyConstraintName: 'FK_11690dede7681c3c9ec1fd62d08' })
   baseUom: UOM;
 
   @ManyToOne(() => Service, service => service.orderItems)

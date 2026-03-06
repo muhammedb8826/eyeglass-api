@@ -242,7 +242,10 @@ export class OrdersService {
 
       // Create order items with calculated totalCost and sales (use resolved pricing)
       const orderItems = await Promise.all(resolvedOrderItems.map(async (item) => {
-        const quantity = parseFloat((item.quantity || 0).toString());
+        const hasPerEye = item.quantityRight !== undefined || item.quantityLeft !== undefined;
+        const quantityRight = hasPerEye ? parseFloat((item.quantityRight ?? 0).toString()) : parseFloat((item.quantity || 0).toString());
+        const quantityLeft = hasPerEye ? parseFloat((item.quantityLeft ?? 0).toString()) : 0;
+        const quantity = quantityRight + quantityLeft;
 
         // Determine which service ID to use for calculations (null for item-only eyeglass lines)
         const serviceIdForCalculation = item.isNonStockService ? item.nonStockServiceId : item.serviceId;
@@ -310,7 +313,9 @@ export class OrdersService {
           totalAmount,
           adminApproval: item.adminApproval || false,
           uomId: item.uomId,
-          quantity: quantity,
+          quantity,
+          quantityRight,
+          quantityLeft,
           unitPrice,
           description: item.description || '',
           isDiscounted: item.isDiscounted || false,
@@ -724,7 +729,10 @@ export class OrdersService {
 
       // Upsert order items with calculated totalCost and sales
       for (const item of orderItems) {
-        const quantity = parseFloat((item.quantity || 0).toString());
+        const hasPerEye = item.quantityRight !== undefined || item.quantityLeft !== undefined;
+        const quantityRight = hasPerEye ? parseFloat((item.quantityRight ?? 0).toString()) : parseFloat((item.quantity || 0).toString());
+        const quantityLeft = hasPerEye ? parseFloat((item.quantityLeft ?? 0).toString()) : 0;
+        const quantity = quantityRight + quantityLeft;
 
         // Determine if this is a non-stock service
         const isNonStockService = item.isNonStockService || !!item.nonStockServiceId;
@@ -799,7 +807,9 @@ export class OrdersService {
             totalAmount: totalAmountToUse,
             adminApproval: item.adminApproval || false,
             uomId: item.uomId,
-            quantity: quantity,
+            quantity,
+            quantityRight,
+            quantityLeft,
             unitPrice: unitPriceToUse,
             description: item.description,
             isDiscounted: item.isDiscounted || false,
@@ -845,7 +855,9 @@ export class OrdersService {
             totalAmount: totalAmountToUse,
             adminApproval: item.adminApproval || false,
             uomId: item.uomId,
-            quantity: quantity,
+            quantity,
+            quantityRight,
+            quantityLeft,
             unitPrice: unitPriceToUse,
             description: item.description,
             isDiscounted: item.isDiscounted || false,
@@ -1736,6 +1748,8 @@ export class OrdersService {
           customerName: order.customer?.fullName || 'Unknown',
           unit: unit,
           quantity: orderItem.quantity,
+          quantityRight: orderItem.quantityRight ?? 0,
+          quantityLeft: orderItem.quantityLeft ?? 0,
           metersquare: metersquare,
           costPrice: pricing.costPrice || 0,
           totalCost: totalCostForItem,
