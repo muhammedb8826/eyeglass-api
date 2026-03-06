@@ -52,7 +52,6 @@ import { MachinesController } from './machines/machines.controller';
 // Config
 import { createDatabaseConfig } from './config/database.config';
 import { FixedCostModule } from './fixed-cost/fixed-cost.module';
-import { FilePathModule } from './file-path/file-path.module';
 import { NonStockServicesModule } from './non-stock-services/non-stock-services.module';
 import configuration from './config/configuration';
 
@@ -107,7 +106,6 @@ import configuration from './config/configuration';
     PaymentTermsModule,
     PaymentTransactionsModule,
     FixedCostModule,
-    FilePathModule,
     NonStockServicesModule,
   ],
   providers: [

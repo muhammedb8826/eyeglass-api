@@ -273,7 +273,6 @@ Standard CRUD pattern for:
 - **Commission Transactions**: `/commission-transactions`
 - **Discounts**: `/discounts`
 - **Fixed Cost**: `/fixed-cost`
-- **File Path**: `/file-path`
 - **User Machine**: `/user-machine`
 
 ### File Upload
