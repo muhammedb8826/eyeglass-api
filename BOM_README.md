@@ -148,13 +148,34 @@ From this payload the lab can compute, for `quantity = 2`:
 
 ---
 
-## 4. Managing BOM data
+## 4. Managing BOM data (CRUD API)
 
-Right now, BOM is modeled in the backend and joined into order item responses. You can manage the data in any of these ways:
+You can now manage BOM lines via dedicated endpoints:
 
-- **Direct DB inserts/updates** to `bom` table (for initial setup or migrations).
-- **Future admin UI** / API:
-  - e.g. endpoints under `/bom` or `/items/:id/bom` to create, list, update, and delete BOM lines per parent item.
+- `POST /api/v1/boms`
+  - Body: `CreateBomDto`
+  - Creates a new BOM line for a parent item.
+  - Validates that:
+    - `parentItemId` exists.
+    - `componentItemId` exists.
+    - `uomId` exists.
+    - Parent and component items are not the same.
+    - There is no duplicate BOM line for the same `(parentItemId, componentItemId, uomId)`.
+
+- `GET /api/v1/boms`
+  - Optional query: `?parentItemId=<uuid>`
+  - Returns all BOM lines, or only those for a specific parent item.
+  - Includes `parentItem`, `componentItem`, and `uom` in the response.
+
+- `GET /api/v1/boms/:id`
+  - Returns a single BOM line by ID (with relations).
+
+- `PATCH /api/v1/boms/:id`
+  - Body: `UpdateBomDto` (partial update of `CreateBomDto`).
+  - Allows changing parent/component/UOM/quantity with the same validations as `create`.
+
+- `DELETE /api/v1/boms/:id`
+  - Removes a BOM line.
 
 Recommended practice:
 
@@ -167,6 +188,7 @@ Recommended practice:
 
 - **BOM = recipe** for each lens item.
 - Stored in `bom` table; linked to `Item`.
+- Managed via `/api/v1/boms` CRUD endpoints.
 - Included automatically in order item APIs as `item.bomLines`.
 - Lab uses BOM to know **what** and **how much** to request from store; store uses existing inventory flows to stock out those items to the lab.
 
