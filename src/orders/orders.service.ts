@@ -446,14 +446,13 @@ export class OrdersService {
 
       await queryRunner.commitTransaction();
 
-      // Return the complete order with all relations (item + machine = tool for eyeglass)
+      // Return the complete order with all relations
       return await this.orderRepository.findOne({
         where: { id: savedOrder.id },
         relations: [
           'customer',
           'orderItems',
           'orderItems.item',
-          'orderItems.item.machine',
           'orderItems.itemBase',
           'orderItems.pricing',
           'paymentTerm',
@@ -597,7 +596,6 @@ export class OrdersService {
         'customer',
         'orderItems',
         'orderItems.item',
-        'orderItems.item.machine',
         'orderItems.itemBase',
         'orderItems.pricing',
         'orderItems.service',
@@ -625,7 +623,6 @@ export class OrdersService {
         'customer',
         'orderItems',
         'orderItems.item',
-        'orderItems.item.machine',
         'orderItems.itemBase',
         'orderItems.pricing',
         'orderItems.service',

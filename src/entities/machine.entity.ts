@@ -1,6 +1,5 @@
 import { Entity, Column, OneToMany, CreateDateColumn, UpdateDateColumn, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { UserMachine } from './user-machine.entity';
-import { Item } from './item.entity';
 import { randomUUID } from 'crypto';
 
 @Entity()
@@ -32,7 +31,4 @@ export class Machine {
 
   @OneToMany(() => UserMachine, userMachine => userMachine.machine)
   users: UserMachine[];
-
-  @OneToMany(() => Item, item => item.machine)
-  items: Item[];
 }

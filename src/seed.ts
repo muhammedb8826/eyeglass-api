@@ -6,7 +6,6 @@ import { UOM } from './entities/uom.entity';
 import { Item } from './entities/item.entity';
 import { ItemBase } from './entities/item-base.entity';
 import { LabTool } from './entities/lab-tool.entity';
-import { Machine } from './entities/machine.entity';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
@@ -31,7 +30,6 @@ async function seed() {
     const itemRepository = AppDataSource.getRepository(Item);
     const itemBaseRepository = AppDataSource.getRepository(ItemBase);
     const labToolRepository = AppDataSource.getRepository(LabTool);
-    const machineRepository = AppDataSource.getRepository(Machine);
 
     // Seed Admin User (User entity uses @PrimaryColumn('uuid') + BeforeInsert setId; seed must set id when saving plain object)
     const adminData = {
@@ -118,22 +116,6 @@ async function seed() {
       }
     }
 
-    // Seed basic machine
-    let defaultMachine = await machineRepository.findOne({
-      where: { name: 'Default Machine' },
-    });
-    if (!defaultMachine) {
-      defaultMachine = await machineRepository.save({
-        id: randomUUID(),
-        name: 'Default Machine',
-        status: true,
-        description: 'Default production machine for lens items',
-      });
-      console.log('Default machine created');
-    } else {
-      console.log('Default machine already exists');
-    }
-
     // Seed unit category for countable pieces
     let pieceCategory = await unitCategoryRepository.findOne({
       where: { name: 'Piece' },
@@ -176,51 +158,30 @@ async function seed() {
       {
         itemCode: '1113',
         name: 'SV Glass white',
-        lensType: 'SINGLE_VISION',
-        lensMaterial: 'GLASS',
-        lensIndex: 1.5,
       },
       {
         itemCode: '1123',
         name: 'SV Glass photosolar',
-        lensType: 'SINGLE_VISION',
-        lensMaterial: 'GLASS_PHOTOSOLAR',
-        lensIndex: 1.5,
       },
       {
         itemCode: '3425',
         name: 'Polarized Progressive',
-        lensType: 'PROGRESSIVE',
-        lensMaterial: 'POLARIZED',
-        lensIndex: 1.6,
       },
       {
         itemCode: '4000',
         name: 'Finished Lens',
-        lensType: 'FINISHED',
-        lensMaterial: 'PLASTIC',
-        lensIndex: 1.5,
       },
       {
         itemCode: '3221',
         name: 'Progressi plastic solar',
-        lensType: 'PROGRESSIVE',
-        lensMaterial: 'PLASTIC',
-        lensIndex: 1.5,
       },
       {
         itemCode: '1311',
         name: 'SV Plastic (multi-base)',
-        lensType: 'SINGLE_VISION',
-        lensMaterial: 'PLASTIC',
-        lensIndex: 1.5,
       },
       {
         itemCode: '1322',
         name: 'SV plastic white',
-        lensType: 'SINGLE_VISION',
-        lensMaterial: 'PLASTIC',
-        lensIndex: 1.5,
       },
     ];
 
@@ -237,20 +198,14 @@ async function seed() {
           id: randomUUID(),
           itemCode: lensItem.itemCode,
           name: lensItem.name,
-          description: lensItem.lensType,
+          description: lensItem.name,
           reorder_level: 50,
-          initial_stock: 0,
-          updated_initial_stock: 0,
-          machineId: defaultMachine.id,
           can_be_purchased: true,
           can_be_sold: true,
           quantity: 0,
           unitCategoryId: pieceCategory.id,
           defaultUomId: pcsUom.id,
           purchaseUomId: pcsUom.id,
-          lensMaterial: lensItem.lensMaterial,
-          lensIndex: lensItem.lensIndex,
-          lensType: lensItem.lensType,
         } as Item);
         console.log(`Lens item "${lensItem.itemCode} - ${lensItem.name}" created`);
       } else {

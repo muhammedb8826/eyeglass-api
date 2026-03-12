@@ -15,12 +15,6 @@ export class CreateItemDto {
     @IsInt()
     reorder_level: number;
 
-    @IsInt()
-    initial_stock: number;
-
-    @IsInt()
-    updated_initial_stock: number;
-
     @IsBoolean()
     can_be_sold: boolean;
 
@@ -34,9 +28,6 @@ export class CreateItemDto {
     @IsOptional()
     @IsString()
     purchaseUomId?: string;
-
-    @IsString()
-    machineId: string;
 
     quantity: number;
 

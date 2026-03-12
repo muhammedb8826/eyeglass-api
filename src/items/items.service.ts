@@ -7,7 +7,6 @@ import { UpdateItemBaseDto } from './dto/update-item-base.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { Item } from '../entities/item.entity';
 import { ItemBase } from '../entities/item-base.entity';
-import { Machine } from '../entities/machine.entity';
 import { Pricing } from '../entities/pricing.entity';
 
 @Injectable()
@@ -17,26 +16,11 @@ export class ItemsService {
     private itemRepository: Repository<Item>,
     @InjectRepository(ItemBase)
     private itemBaseRepository: Repository<ItemBase>,
-    @InjectRepository(Machine)
-    private machineRepository: Repository<Machine>,
     @InjectRepository(Pricing)
     private pricingRepository: Repository<Pricing>,
   ) {}
 
   async create(createItemDto: CreateItemDto) {
-    if (!createItemDto.machineId) {
-      throw new ConflictException('Machine ID is required.');
-    }
-  
-    // Check if the machine exists
-    const machineExists = await this.machineRepository.findOne({
-      where: { id: createItemDto.machineId },
-    });
-  
-    if (!machineExists) {
-      throw new ConflictException('Machine ID does not exist.');
-    }
-  
     // Check if an item with the same name or code already exists
     const existingItem = await this.itemRepository.findOne({
       where: createItemDto.itemCode
@@ -57,14 +41,11 @@ export class ItemsService {
         name: createItemDto.name,
         description: createItemDto.description || '',
         reorder_level: createItemDto.reorder_level || 0,
-        initial_stock: createItemDto.initial_stock || 0,
-        updated_initial_stock: createItemDto.updated_initial_stock || 0,
         can_be_sold: createItemDto.can_be_sold !== undefined ? createItemDto.can_be_sold : false,
         can_be_purchased: createItemDto.can_be_purchased !== undefined ? createItemDto.can_be_purchased : false,
         quantity: createItemDto.quantity || 0,
         defaultUomId: createItemDto.defaultUomId,
         purchaseUomId: createItemDto.purchaseUomId,
-        machineId: createItemDto.machineId,
         unitCategoryId: createItemDto.unitCategoryId,
       });
 
@@ -84,7 +65,6 @@ export class ItemsService {
   async findAll(skip: number, take: number, search?: string) {
     const queryBuilder = this.itemRepository
       .createQueryBuilder('item')
-      .leftJoinAndSelect('item.machine', 'machine')
       .leftJoinAndSelect('item.defaultUom', 'defaultUom')
       .leftJoinAndSelect('item.purchaseUom', 'purchaseUom')
       .leftJoinAndSelect('item.unitCategory', 'unitCategory')
@@ -111,7 +91,6 @@ export class ItemsService {
   async findAllItems() {
     return this.itemRepository.find({
       relations: {
-        machine: true,
         defaultUom: true,
         purchaseUom: true,
         unitCategory: {
@@ -127,7 +106,6 @@ export class ItemsService {
     const item = await this.itemRepository.findOne({
       where: { id },
       relations: {
-        machine: true,
         defaultUom: true,
         purchaseUom: true,
         unitCategory: {
@@ -216,7 +194,7 @@ export class ItemsService {
   async getOrderInfo(itemId: string, itemBaseId?: string | null) {
     const item = await this.itemRepository.findOne({
       where: { id: itemId },
-      relations: { machine: true, defaultUom: true, unitCategory: true, itemBases: true },
+      relations: { defaultUom: true, unitCategory: true, itemBases: true },
     });
     if (!item) {
       throw new NotFoundException(`Item with ID ${itemId} not found`);
@@ -232,7 +210,6 @@ export class ItemsService {
     return {
       item,
       pricing: pricing ?? null,
-      machine: item.machine ?? null,
     };
   }
 
@@ -246,8 +223,6 @@ export class ItemsService {
       name: updateItemDto.name,
       description: updateItemDto.description,
       reorder_level: updateItemDto.reorder_level,
-      initial_stock: updateItemDto.initial_stock,
-      updated_initial_stock: updateItemDto.updated_initial_stock,
       can_be_sold: updateItemDto.can_be_sold,
       can_be_purchased: updateItemDto.can_be_purchased,
       quantity: updateItemDto.quantity,
@@ -255,7 +230,6 @@ export class ItemsService {
 
     if (updateItemDto.defaultUomId) updateData.defaultUomId = updateItemDto.defaultUomId;
     if (updateItemDto.purchaseUomId) updateData.purchaseUomId = updateItemDto.purchaseUomId;
-    if (updateItemDto.machineId) updateData.machineId = updateItemDto.machineId;
     if (updateItemDto.unitCategoryId) updateData.unitCategoryId = updateItemDto.unitCategoryId;
   
     try {

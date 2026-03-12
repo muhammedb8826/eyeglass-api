@@ -1,5 +1,4 @@
 import { Entity, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn, JoinTable, JoinColumn, ManyToMany, BeforeInsert, PrimaryColumn } from 'typeorm';
-import { Machine } from './machine.entity';
 import { UOM } from './uom.entity';
 import { UnitCategory } from './unit-category.entity';
 import { Attribute } from './attribute.entity';
@@ -37,15 +36,6 @@ export class Item {
   @Column()
   reorder_level: number;
 
-  @Column()
-  initial_stock: number;
-
-  @Column()
-  updated_initial_stock: number;
-
-  @Column()
-  machineId: string;
-
   @CreateDateColumn()
   createdAt: Date;
 
@@ -69,16 +59,6 @@ export class Item {
 
   @Column({ nullable: true })
   purchaseUomId: string;
-
-  // Lens-blank specific metadata
-  @Column({ nullable: true })
-  lensMaterial: string;
-
-  @Column('float', { nullable: true })
-  lensIndex: number;
-
-  @Column({ nullable: true })
-  lensType: string;
 
   @OneToMany(() => Attribute, attribute => attribute.items)
   attributes: Attribute[];
@@ -107,10 +87,6 @@ export class Item {
   @ManyToOne(() => UOM, uom => uom.defaultUom)
   @JoinColumn({ name: 'defaultUomId' })
   defaultUom: UOM;
-
-  @ManyToOne(() => Machine, machine => machine.items)
-  @JoinColumn({ name: 'machineId' })
-  machine: Machine;
 
   @ManyToOne(() => UOM, uom => uom.purchaseUom)
   @JoinColumn({ name: 'purchaseUomId' })
