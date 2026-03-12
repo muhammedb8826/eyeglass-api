@@ -9,6 +9,7 @@ import { PurchaseItems } from './purchase-item.entity';
 import { SaleItems } from './sale-item.entity';
 import { Discount } from './discount.entity';
 import { Service } from './service.entity';
+import { Bom } from './bom.entity';
 import { randomUUID } from 'crypto';
 
 @Entity('items')
@@ -64,6 +65,10 @@ export class Item {
 
   @OneToMany(() => ItemBase, itemBase => itemBase.item)
   itemBases: ItemBase[];
+
+  /** Bill of Materials: components needed from inventory to produce this item. */
+  @OneToMany(() => Bom, bom => bom.parentItem)
+  bomLines: Bom[];
 
   @OneToMany(() => OrderItems, orderItems => orderItems.item)
   OrderItems: OrderItems[];

@@ -60,6 +60,9 @@ export class OrderItemsService {
         'uom',
         'pricing',
         'item',
+        'item.bomLines',
+        'item.bomLines.componentItem',
+        'item.bomLines.uom',
         'itemBase',
         'service',
         'orderItemNotes',
@@ -76,6 +79,9 @@ export class OrderItemsService {
       .leftJoinAndSelect('orderItems.uom', 'uom')
       .leftJoinAndSelect('orderItems.pricing', 'pricing')
       .leftJoinAndSelect('orderItems.item', 'item')
+      .leftJoinAndSelect('item.bomLines', 'bom')
+      .leftJoinAndSelect('bom.componentItem', 'bomComponentItem')
+      .leftJoinAndSelect('bom.uom', 'bomUom')
       .leftJoinAndSelect('orderItems.itemBase', 'itemBase')
       .leftJoinAndSelect('orderItems.service', 'service')
       .leftJoinAndSelect('orderItems.orderItemNotes', 'orderItemNotes')
@@ -154,7 +160,20 @@ export class OrderItemsService {
   async findOne(id: string) {
     return this.orderItemsRepository.findOne({
       where: { id },
-      relations: ['order', 'uom', 'pricing', 'item', 'itemBase', 'service', 'nonStockService', 'orderItemNotes', 'orderItemNotes.user'],
+      relations: [
+        'order',
+        'uom',
+        'pricing',
+        'item',
+        'item.bomLines',
+        'item.bomLines.componentItem',
+        'item.bomLines.uom',
+        'itemBase',
+        'service',
+        'nonStockService',
+        'orderItemNotes',
+        'orderItemNotes.user',
+      ],
     });
   }
 
