@@ -113,6 +113,14 @@ export class OrderItems {
   @Column()
   adminApproval: boolean;
 
+  /** Per-item approval status (e.g. Approved) */
+  @Column({ default: 'Pending' })
+  approvalStatus: string;
+
+  /** Per-item quality control status (Pending, Passed, Failed) */
+  @Column({ default: 'Pending' })
+  qualityControlStatus: string;
+
   @Column()
   uomId: string;
 

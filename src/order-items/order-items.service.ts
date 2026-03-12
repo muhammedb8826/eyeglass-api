@@ -5,10 +5,7 @@ import { CreateOrderItemDto } from './dto/create-order-item.dto';
 import { UpdateOrderItemDto } from './dto/update-order-item.dto';
 import { OrderItems } from 'src/entities/order-item.entity';
 import { Order } from 'src/entities/order.entity';
-import { OperatorStock } from 'src/entities/operator-stock.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
-import { BincardService } from 'src/bincard/bincard.service';
-import type { RecordBincardMovementDto } from 'src/bincard/bincard.service';
 import { OrdersService } from 'src/orders/orders.service';
 
 @Injectable()
@@ -18,12 +15,9 @@ export class OrderItemsService {
     private readonly orderItemsRepository: Repository<OrderItems>,
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
-    @InjectRepository(OperatorStock)
-    private readonly operatorStockRepository: Repository<OperatorStock>,
     @InjectRepository(PaymentTerm)
     private readonly paymentTermRepository: Repository<PaymentTerm>,
     private readonly dataSource: DataSource,
-    private readonly bincardService: BincardService,
     private readonly ordersService: OrdersService,
   ) {}
 
@@ -170,8 +164,6 @@ export class OrderItemsService {
     await queryRunner.startTransaction();
 
     try {
-      let pendingBincard: RecordBincardMovementDto | null = null;
-
       const currentOrderItem = await this.orderItemsRepository.findOne({
         where: { id },
         relations: ['item'],
@@ -181,66 +173,21 @@ export class OrderItemsService {
         throw new NotFoundException('Order item not found');
       }
 
-      // Handle stock reduction for InProgress or Cancelled (only when status changes to these states)
-      if ((updateOrderItemDto.status === 'InProgress' || updateOrderItemDto.status === 'Cancelled') &&
-          currentOrderItem.status !== 'InProgress' && currentOrderItem.status !== 'Cancelled' &&
-          !currentOrderItem.isNonStockService) {
-        const operatorStock = await this.operatorStockRepository.findOne({
-          where: { itemId: currentOrderItem.itemId },
-        });
+      const newQualityControlStatus =
+        updateOrderItemDto.qualityControlStatus ?? currentOrderItem.qualityControlStatus;
 
-        if (!operatorStock) {
-          throw new ConflictException(`Please make a request for item ${currentOrderItem.item.name} before trying to print`);
-        }
-
-        const quantityToReduce = currentOrderItem.unit;
-        if (operatorStock.quantity < quantityToReduce) {
-          throw new ConflictException(`Insufficient stock for item: ${currentOrderItem.item.name}. Available: ${operatorStock.quantity}, Required: ${quantityToReduce}`);
-        }
-
-        const newQuantity = operatorStock.quantity - quantityToReduce;
-        await queryRunner.manager.update(OperatorStock, operatorStock.id, {
-          quantity: newQuantity,
-        });
-
-        pendingBincard = {
-          itemId: currentOrderItem.itemId,
-          movementType: 'OUT',
-          quantity: quantityToReduce,
-          balanceAfter: newQuantity,
-          referenceType: 'ORDER',
-          referenceId: currentOrderItem.orderId,
-          description: `Order item InProgress/Cancelled – stock reduced`,
-          uomId: operatorStock.uomId,
-        };
-      }
-
-      // Handle stock restoration when status changes from InProgress/Cancelled to other states
-      if ((currentOrderItem.status === 'InProgress' || currentOrderItem.status === 'Cancelled') &&
-          updateOrderItemDto.status !== 'InProgress' && updateOrderItemDto.status !== 'Cancelled' &&
-          !currentOrderItem.isNonStockService) {
-        const operatorStock = await this.operatorStockRepository.findOne({
-          where: { itemId: currentOrderItem.itemId },
-        });
-
-        if (operatorStock) {
-          const quantityToRestore = currentOrderItem.unit;
-          const newQuantity = operatorStock.quantity + quantityToRestore;
-          await queryRunner.manager.update(OperatorStock, operatorStock.id, {
-            quantity: newQuantity,
-          });
-
-          pendingBincard = {
-            itemId: currentOrderItem.itemId,
-            movementType: 'IN',
-            quantity: quantityToRestore,
-            balanceAfter: newQuantity,
-            referenceType: 'ORDER',
-            referenceId: currentOrderItem.orderId,
-            description: `Order item status reverted – stock restored`,
-            uomId: operatorStock.uomId,
-          };
-        }
+      // Enforce approval before starting production
+      const nextStatus = updateOrderItemDto.status ?? currentOrderItem.status;
+      const nextApprovalStatus =
+        updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus;
+      if (
+        nextStatus === 'InProgress' &&
+        currentOrderItem.status !== 'InProgress' &&
+        nextApprovalStatus !== 'Approved'
+      ) {
+        throw new ConflictException(
+          'Cannot start production: order item is not approved. Set approvalStatus to "Approved" first.',
+        );
       }
 
       // Check payment verification based on forcePayment setting and status
@@ -275,6 +222,13 @@ export class OrderItemsService {
             `Payment is not completed. Cannot change status to "${updateOrderItemDto.status}" because force payment is enabled and no payment has been made.`
           );
         }
+      }
+
+      // Prevent delivering an item unless QC has passed
+      if (nextStatus === 'Delivered' && newQualityControlStatus !== 'Passed') {
+        throw new ConflictException(
+          'Cannot deliver item: quality control must be "Passed" before delivery.',
+        );
       }
 
       const hasPerEye = updateOrderItemDto.quantityRight !== undefined || updateOrderItemDto.quantityLeft !== undefined;
@@ -313,6 +267,8 @@ export class OrderItemsService {
         lensIndex: updateOrderItemDto.lensIndex,
         totalAmount: parseFloat((updateOrderItemDto.totalAmount || 0).toString()),
         adminApproval: updateOrderItemDto.adminApproval,
+        approvalStatus: updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus,
+        qualityControlStatus: newQualityControlStatus,
         uomId: updateOrderItemDto.uomId,
         unitPrice: parseFloat((updateOrderItemDto.unitPrice || 0).toString()),
         description: updateOrderItemDto.description,
@@ -333,10 +289,6 @@ export class OrderItemsService {
       await this.ordersService.ensureLabToolsAvailableForOrderItems(orderItemsForCheck);
 
       await queryRunner.commitTransaction();
-
-      if (pendingBincard) {
-        await this.bincardService.recordMovement(pendingBincard);
-      }
 
       return await this.orderItemsRepository.findOne({
         where: { id },

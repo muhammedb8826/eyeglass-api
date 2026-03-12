@@ -1,7 +1,7 @@
 {
-  "name": "ian-backend",
+  "name": "lens-backend",
   "version": "1.0.0",
-  "description": "NestJS backend application for the IAN project.",
+  "description": "NestJS backend application for the LENS project.",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

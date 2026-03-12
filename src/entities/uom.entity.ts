@@ -1,6 +1,5 @@
 import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, Unique, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { UnitCategory } from './unit-category.entity';
-import { OperatorStock } from './operator-stock.entity';
 import { OrderItems } from './order-item.entity';
 import { Pricing } from './pricing.entity';
 import { PurchaseItems } from './purchase-item.entity';
@@ -41,9 +40,6 @@ export class UOM {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @OneToMany(() => OperatorStock, operatorStock => operatorStock.uoms)
-  operatorStock: OperatorStock[];
 
   @OneToMany(() => OrderItems, orderItems => orderItems.uom)
   orderItems: OrderItems[];

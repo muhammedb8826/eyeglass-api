@@ -130,14 +130,13 @@ When the selected item has **bases** (see §5.3), you can send:
 **Services optional (eyeglass item-only)**  
 For lens-only order lines you do **not** need to send a service. When the user selects an **item** (and optionally a **base** variant), the system should:
 
-1. **Check pricing and tool** – Call `GET /api/v1/items/:id/order-info?itemBaseId=...` (omit `itemBaseId` if the item has no bases or one variant). The response includes:
-   - `item` – the lens blank (with `machine` = required tool)
+1. **Check pricing** – Call `GET /api/v1/items/:id/order-info?itemBaseId=...` (omit `itemBaseId` if the item has no bases or one variant). The response includes:
+   - `item` – the lens blank
    - `pricing` – item-only pricing for that item (+ base), or `null` if none is configured
-   - `machine` – the machine/tool required for this item
 
 2. **Create the order item** – Send `itemId`, optional `itemBaseId`, `uomId`, `baseUomId` (e.g. from `item.defaultUomId` and `pricing.baseUomId`). You can omit `pricingId`: the backend resolves it from the item (and itemBase). You can omit `serviceId` and `nonStockServiceId` for item-only lines.
 
-Order responses (`GET /api/v1/orders`, `GET /api/v1/orders/:id`) include `orderItems[].item` and `orderItems[].item.machine` so the frontend can show the **tool** per line.
+Order responses (`GET /api/v1/orders`, `GET /api/v1/orders/:id`) include `orderItems[].item` so the frontend can show the lens blank per line.
 
 These live alongside the existing ordering fields:
 
@@ -145,6 +144,8 @@ These live alongside the existing ordering fields:
 - `pricingId` (optional – resolved from item + itemBase when omitted), `uomId`, `baseUomId`
 - **Quantity (updated – per eye):** Right and left lenses can be produced separately. Send **`quantityRight`** and/or **`quantityLeft`** for per-eye quantities; the backend sets **`quantity`** = `quantityRight + quantityLeft`. If you only send **`quantity`** (legacy), it is treated as right-eye only (`quantityRight = quantity`, `quantityLeft = 0`). Order totals use the total `quantity`.
 - `unitPrice`, `totalAmount`, `discount`, `level`, `status` (eyeglass standard: **Pending** → **InProgress** → **Ready** → **Delivered**; or **Cancelled**), etc.
+- `approvalStatus` – per-line approval (string, e.g. `"Approved"`).
+- `qualityControlStatus` – per-line QC (`"Pending"`, `"Passed"`, `"Failed"`). When `"Failed"`, the backend blocks status changes to `"Delivered"` so the lens must be remade and QC passed first.
 
 ### 4.3 Example order item in `orderItems[]`
 
@@ -164,6 +165,8 @@ These live alongside the existing ordering fields:
   "level": 1,
   "adminApproval": false,
   "isDiscounted": false,
+  "approvalStatus": "Pending",
+  "qualityControlStatus": "Pending",
   "status": "Pending",
   "description": "SV lenses, AR coating",
 
@@ -241,14 +244,11 @@ The frontend **does not need to send any extra fields** for this check:
 
 ## 5. Item (Lens Blank) Metadata
 
-`Item` entities can carry lens metadata for better selection in the frontend.
+`Item` entities can carry minimal metadata for better selection in the frontend.
 
 ### 5.1 New fields on `Item`
 
 - `itemCode?: string` – optional **short code** (e.g. `1113`, `1123`, `3221`, `1311`)
-- `lensMaterial?: string`
-- `lensIndex?: number`
-- `lensType?: string`
 
 ### 5.2 Material bases (itemCode with base^add variants)
 
@@ -268,7 +268,7 @@ The API models this with an **ItemBase** entity per variant:
 
 - `GET /api/v1/items/:id` – item response includes `itemBases[]` when present (optional relation).
 - `GET /api/v1/items/:id/bases` – returns the list of bases for that item (e.g. for dropdown when creating an order line).
-- `GET /api/v1/items/:id/order-info?itemBaseId=...` – when the user selects an item for an order line, returns **pricing** (item-only for that item and base) and **tool** (`machine`). Use this to check pricing and required machine before creating the order item.
+- `GET /api/v1/items/:id/order-info?itemBaseId=...` – when the user selects an item for an order line, returns **pricing** (item-only for that item and base). Use this to check pricing before creating the order item.
 
 When creating or updating an **order item** for an item that has bases, send `itemBaseId` with the chosen variant’s ID. Order item responses include an `itemBase` object when set (with `baseCode`, `addPower`).
 
@@ -280,25 +280,16 @@ When creating or updating an **order item** for an item that has bases, send `it
   "name": "SV Polycarbonate 1.59",
   "description": "Single vision polycarbonate blank",
   "reorder_level": 50,
-  "initial_stock": 200,
-  "updated_initial_stock": 200,
-  "machineId": "uuid-of-machine",
   "quantity": 200,
   "unitCategoryId": "uuid-of-unit-category",
   "defaultUomId": "uuid-of-pair-uom",
-  "purchaseUomId": "uuid-of-pair-uom",
-
-  "lensMaterial": "POLYCARBONATE",
-  "lensIndex": 1.59,
-  "lensType": "SINGLE_VISION"
+  "purchaseUomId": "uuid-of-pair-uom"
 }
 ```
 
 On reads (`GET /api/v1/items` / `/items/:id`), use these to:
 
-- Group items in dropdowns by material / index / type.
 - Show or search by `itemCode` (e.g. printed codes like `1113`, `1123`, `3221`, `1311`).
-- Auto-fill some defaults when the user selects a lens blank for an order item.
 - If the item has `itemBases`, show a second dropdown (or list) so the user picks the base variant (e.g. 350^+2.5); then send `itemBaseId` on the order item.
 
 ---

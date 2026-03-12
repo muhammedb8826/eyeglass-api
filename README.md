@@ -1,6 +1,6 @@
-# Eyeglass API (IAN Backend)
+# Eyeglass API (LENS Backend)
 
-NestJS backend for the eyeglass / IAN project. REST API for orders, items, pricing, customers, sales, purchases, lab tools, and related resources.
+NestJS backend for the eyeglass / LENS project. REST API for orders, items, pricing, customers, sales, purchases, lab tools, and related resources.
 
 ## Tech stack
 
@@ -61,7 +61,7 @@ Default port: `8080`. API base path: `/api/v1`.
 ## Database
 
 - **Schema:** TypeORM manages the schema. Use `DB_SYNCHRONIZE=true` only on a new database; then set it back to `false` or leave it unset to avoid sync errors on existing DBs.
-- **Seed:** Populates admin user, fixed costs, default machine, unit category, UOM, lens items, item bases, and lab tools:
+- **Seed:** Populates admin user, fixed costs, unit category, UOM, lens items, item bases, and lab tools:
 
   ```bash
   npm run seed
@@ -86,6 +86,12 @@ Roles: `USER`, `ADMIN`, `RECEPTION`, `LAB_TECHNICIAN`, `OPERATOR`, `FINANCE`, `D
 ## Order item statuses (eyeglass manufacturing)
 
 Order items use: **Pending** → **InProgress** → **Ready** → **Delivered** (or **Cancelled**). **InProgress** and **Cancelled** consume operator stock. Order status is derived from its items. See [ORDER_TO_PRODUCTION_FLOW.md](ORDER_TO_PRODUCTION_FLOW.md).
+
+Each item also has:
+
+- **approvalStatus** – per-line approval flag (e.g. `"Approved"`).
+- **qualityControlStatus** – per-line QC flag (`"Pending"`, `"Passed"`, `"Failed"`).  
+  An item **cannot move to `Delivered`** while `qualityControlStatus === "Failed"`; it must be remade and set to `"Passed"` first.
 
 ## Scripts
 

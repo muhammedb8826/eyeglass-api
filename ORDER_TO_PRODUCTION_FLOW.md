@@ -13,19 +13,26 @@ This describes the steps from **order creation** to **producing the lenses** and
   - Resolves pricing, calculates cost/sales and order totals.
   - **Lab tools:** If any order item has a `baseCurve`, it checks that at least one lab tool covers that base curve with `quantity > 0`. If not, the request fails with a clear error so the order cannot be “produced” later without the right tools.
 
-### 2. Order item statuses (eyeglass manufacturing standard)
+### 2. Order item statuses, approval, and quality control
 
-Each **order item** has a `status`. The **order** status is derived from its items (e.g. all items `InProgress` → order `InProgress`).
+Each **order item** has:
 
-| Item status   | Meaning | What the backend does |
-|---------------|--------|------------------------|
-| **Pending**   | Order received, not yet in production | — |
-| **InProgress** | Lens in production | For **stock** items: reduces **operator stock** by `unit`, records **bincard** OUT. Requires operator stock to exist and be sufficient; otherwise 409 Conflict. |
-| **Ready**     | Production done, ready for pickup/delivery | — |
-| **Delivered** | Handed to customer | If payment term has `forcePayment` and `remainingAmount > 0`, blocks with 409. |
-| **Cancelled** | Job cancelled | Same stock reduction as InProgress (stock is consumed). Reverting from Cancelled restores stock. |
+- a `status` (eyeglass manufacturing standard), and
+- per-line `approvalStatus` and `qualityControlStatus`.
 
-- **Update item status:** **PATCH /api/v1/order-items/:id** with body `{ "status": "InProgress", ... }` (and other fields as needed).
+The **order** status is derived from its items (e.g. all items `InProgress` → order `InProgress`).
+
+| Field / status          | Meaning | What the backend does |
+|-------------------------|--------|------------------------|
+| **status = Pending**    | Order received, not yet in production | — |
+| **status = InProgress** | Lens in production | For **stock** items: reduces **operator stock** by `unit`, records **bincard** OUT. Requires operator stock to exist and be sufficient; otherwise 409 Conflict. |
+| **status = Ready**      | Production done, ready for pickup/delivery | — |
+| **status = Delivered**  | Handed to customer | If payment term has `forcePayment` and `remainingAmount > 0`, blocks with 409. Additionally, if `qualityControlStatus = "Failed"`, backend blocks delivery and returns 409 (item must be remade and QC passed). |
+| **status = Cancelled**  | Job cancelled | Same stock reduction as InProgress (stock is consumed). Reverting from Cancelled restores stock. |
+| **approvalStatus**      | Per-line approval (e.g. `"Approved"`) | Stored for each item; no hard backend rule beyond what you add in UI/flows. |
+| **qualityControlStatus** | Per-line QC (`"Pending"`, `"Passed"`, `"Failed"`) | When `"Failed"`, the backend prevents that item’s `status` from being set to `"Delivered"`. |
+
+- **Update item status / QC:** **PATCH /api/v1/order-items/:id** with body such as `{ "status": "InProgress", "approvalStatus": "Approved", "qualityControlStatus": "Passed", ... }` (and other fields as needed).
 
 ### 3. What “producing the lenses” means in code
 
@@ -53,14 +60,14 @@ These are not required for the basic “order → produce lenses” path but clo
 |---|------|-------------|
 | 1 | **Lab tool check at “InProgress”** | Right now lab tools are only checked when the order is created/updated. If an item has `baseCurve`, you could **re-check** (and optionally **decrement**) lab tool availability when its status changes to **InProgress**, so you never start production without a tool. |
 | 2 | **Lab tool reservation/decrement** | The system only checks that a tool *exists* with quantity > 0; it does not reserve or decrement. You could decrement (or reserve) the matching lab tool when status → InProgress and restore when status is reverted from InProgress/Cancelled. |
-| 3 | **“Can produce” endpoint** | A **GET /api/v1/orders/:id/can-produce** (or similar) that returns whether the order is ready for production: e.g. all items have operator stock ≥ required, all base curves have an available lab tool, and optionally payment OK. Frontend can call this before showing “Start production”. |
-| 4 | **Documentation for frontend** | Expose this flow in your frontend docs (statuses Pending → InProgress → Ready → Delivered, PATCH order-items, operator stock requirement). |
+| 3 | **“Can produce” endpoint** | A **GET /api/v1/orders/:id/can-produce** (or similar) that returns whether the order is ready for production: e.g. all items are approved, required items have been issued from store (via inventory), all base curves have an available lab tool, and optionally payment OK. Frontend can call this before showing “Start production”. |
+| 4 | **Documentation for frontend** | Expose this flow in your frontend docs (statuses Pending → InProgress → Ready → Delivered, PATCH order-items, approval + QC, and store-issued inventory requirement). |
 
 ---
 
 ## Summary
 
 - **To complete the order and produce the lenses today:**  
-  Create/update order (pricing + lab tools validated) → ensure operator stock for each item → set each order item to **InProgress** via **PATCH /api/v1/order-items/:id** (stock is reduced and bincard updated) → then **Ready** → **Delivered** as needed.
+  Create/update order (pricing + lab tools validated) → approve items (`approvalStatus = "Approved"`) → store issues material to the lab via standard inventory flows → set each order item to **InProgress** via **PATCH /api/v1/order-items/:id** → mark QC (`qualityControlStatus = "Passed"`) → then **Ready** → **Delivered** as needed.
 - **Order status** follows items: all **Pending** → order Pending; all **InProgress** → order InProgress; all **Ready** → order Ready; all **Delivered** → order Delivered; otherwise **Processing**.
 - **Remaining (optional):** Re-check and/or reserve/decrement lab tools at InProgress, add a “can produce” endpoint, and document the flow for the frontend.

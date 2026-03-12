@@ -42,11 +42,11 @@ export class OperatorStock {
   @Column('float')
   unit: number;
 
-  @ManyToOne(() => Item, item => item.operatorStock)
+  @ManyToOne(() => Item)
   @JoinColumn({ name: 'itemId' })
   item: Item;
 
-  @ManyToOne(() => UOM, uom => uom.operatorStock)
+  @ManyToOne(() => UOM)
   @JoinColumn({ name: 'uomId' })
   uoms: UOM;
 }

@@ -3,7 +3,6 @@ import { UOM } from './uom.entity';
 import { UnitCategory } from './unit-category.entity';
 import { Attribute } from './attribute.entity';
 import { ItemBase } from './item-base.entity';
-import { OperatorStock } from './operator-stock.entity';
 import { OrderItems } from './order-item.entity';
 import { Pricing } from './pricing.entity';
 import { PurchaseItems } from './purchase-item.entity';
@@ -65,9 +64,6 @@ export class Item {
 
   @OneToMany(() => ItemBase, itemBase => itemBase.item)
   itemBases: ItemBase[];
-
-  @OneToMany(() => OperatorStock, operatorStock => operatorStock.item)
-  operatorStock: OperatorStock[];
 
   @OneToMany(() => OrderItems, orderItems => orderItems.item)
   OrderItems: OrderItems[];

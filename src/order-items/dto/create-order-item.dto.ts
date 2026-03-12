@@ -81,6 +81,10 @@ export class CreateOrderItemDto {
 
     totalAmount: number;
     adminApproval: boolean;
+    @IsOptional()
+    approvalStatus?: string;
+    @IsOptional()
+    qualityControlStatus?: string;
     uomId: string;
     /** Total quantity (used when per-eye quantities not provided). Otherwise quantityRight + quantityLeft. */
     quantity: number;
