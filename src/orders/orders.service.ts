@@ -505,9 +505,10 @@ export class OrdersService {
 
     // Handle search filter
     if (search) {
+      // Text-based search (avoid LIKE on UUID columns for Postgres)
       queryBuilder.where(
-        '(order.id LIKE :search OR order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)',
-        { search: `%${search}%` }
+        '(order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)',
+        { search: `%${search}%` },
       );
     }
 
@@ -556,8 +557,8 @@ export class OrdersService {
     // Apply the same filters to the sum query
     if (search) {
       grandTotalQuery.where(
-        '(order.id LIKE :search OR order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)',
-        { search: `%${search}%` }
+        '(order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)',
+        { search: `%${search}%` },
       );
     }
 
