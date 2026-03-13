@@ -398,6 +398,7 @@ export class OrderItemsService {
           unit,
           description: `Store request for order ${baseSeries} – component of ${orderItem.itemId}`,
           status: 'Requested',
+          orderItemId: orderItem.id,
           saleItemNotes: [] as string[],
           saleId: '' as string,
         });
@@ -414,6 +415,7 @@ export class OrderItemsService {
           unit: quantity,
           description: `Store request for order ${baseSeries} – item ${orderItem.itemId}`,
           status: 'Requested',
+          orderItemId: orderItem.id,
           saleItemNotes: [] as string[],
           saleId: '' as string,
         });

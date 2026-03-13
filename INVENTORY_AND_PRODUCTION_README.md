@@ -36,8 +36,10 @@ Each order line (`OrderItems`) includes:
 
 Backend rules:
 
-- To move an item to **`InProgress`**, `approvalStatus` must be `"Approved"`.  
-  (Enforcement of `storeRequestStatus = "Issued"` is the next step: the intention is that production only starts after the store has stocked out the required items, either from BOM components or from the ordered item itself when no BOM exists.)
+- To move an item to **`InProgress`**, BOTH must be true:
+  - `approvalStatus === "Approved"`, and  
+  - `storeRequestStatus === "Issued"` (ensures the store has already stocked out the required items, either from BOM components or, when no BOM exists, from the ordered item itself).  
+  If these conditions are not met, the backend returns a `409 Conflict` when you try to set `status = "InProgress"`.
 - To move an item to **`Delivered`**, `qualityControlStatus` must be `"Passed"` and payment rules (e.g. `forcePayment`) must be satisfied.
 
 The **order** status is derived from its items:

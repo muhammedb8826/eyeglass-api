@@ -4,6 +4,7 @@ import { Sale } from './sale.entity';
 import { UOM } from './uom.entity';
 import { SalesItemNote } from './sales-item-note.entity';
 import { randomUUID } from 'crypto';
+import { OrderItems } from './order-item.entity';
 
 @Entity('sale_items')
 export class SaleItems {
@@ -47,6 +48,10 @@ export class SaleItems {
   @Column('float')
   unit: number;
 
+  /** Optional link back to the originating order item for automatic storeRequestStatus updates. */
+  @Column({ nullable: true })
+  orderItemId: string;
+
   @ManyToOne(() => Item, item => item.sales)
   @JoinColumn({ name: 'itemId' })
   item: Item;
@@ -61,4 +66,8 @@ export class SaleItems {
 
   @OneToMany(() => SalesItemNote, salesItemNote => salesItemNote.saleItem)
   saleItemNotes: SalesItemNote[];
+
+  @ManyToOne(() => OrderItems)
+  @JoinColumn({ name: 'orderItemId' })
+  orderItem: OrderItems;
 }

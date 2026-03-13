@@ -6,6 +6,7 @@ import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
 import { Item } from 'src/entities/item.entity';
 import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
+import { OrderItems } from 'src/entities/order-item.entity';
 
 @Injectable()
 export class SaleItemsService {
@@ -14,6 +15,8 @@ export class SaleItemsService {
     private readonly saleItemRepository: Repository<SaleItems>,
     @InjectRepository(Item)
     private readonly itemRepository: Repository<Item>,
+    @InjectRepository(OrderItems)
+    private readonly orderItemsRepository: Repository<OrderItems>,
     private readonly bincardService: BincardService,
   ) {}
 
@@ -114,6 +117,19 @@ export class SaleItemsService {
           uomId: saleItem.uomId,
         };
         await this.bincardService.recordMovement(movement);
+      }
+
+      // If this sale item is linked to an order item, and all linked sale items are stocked-out,
+      // mark the order item's storeRequestStatus as "Issued".
+      if (saleItem.orderItemId && updateSaleItemDto.status === 'Stocked-out') {
+        const relatedOrderItemId = saleItem.orderItemId;
+        const relatedSaleItems = await manager.find(SaleItems, {
+          where: { orderItemId: relatedOrderItemId },
+        });
+        const allStockedOut = relatedSaleItems.length > 0 && relatedSaleItems.every(si => si.status === 'Stocked-out');
+        if (allStockedOut) {
+          await manager.update(OrderItems, { id: relatedOrderItemId }, { storeRequestStatus: 'Issued' });
+        }
       }
 
       return updatedSaleItem;

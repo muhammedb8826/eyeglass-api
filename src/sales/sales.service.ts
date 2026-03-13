@@ -59,6 +59,8 @@ export class SalesService {
         status: item.status,
         unit: parseFloat(item.unit.toString()),
         baseUomId: item.baseUomId,
+        // Preserve optional orderItemId link if provided (for auto storeRequestStatus syncing)
+        orderItemId: (item as any).orderItemId ?? null,
       }));
 
       // Insert sale items
@@ -204,6 +206,7 @@ export class SalesService {
               status: item.status,
               baseUomId: item.baseUomId,
               unit: parseFloat(item.unit.toString()),
+              orderItemId: (item as any).orderItemId ?? null,
             })
             .execute();
         }
