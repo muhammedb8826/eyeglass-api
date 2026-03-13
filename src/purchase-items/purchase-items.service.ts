@@ -5,6 +5,7 @@ import { CreatePurchaseItemDto } from './dto/create-purchase-item.dto';
 import { UpdatePurchaseItemDto } from './dto/update-purchase-item.dto';
 import { PurchaseItems } from 'src/entities/purchase-item.entity';
 import { Item } from 'src/entities/item.entity';
+import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
 
 @Injectable()
 export class PurchaseItemsService {
@@ -12,7 +13,8 @@ export class PurchaseItemsService {
     @InjectRepository(PurchaseItems)
     private purchaseItemRepository: Repository<PurchaseItems>,
     @InjectRepository(Item)
-    private itemRepository: Repository<Item>
+    private itemRepository: Repository<Item>,
+    private readonly bincardService: BincardService,
   ) {}
 
   async create(createPurchaseItemDto: CreatePurchaseItemDto) {
@@ -148,8 +150,26 @@ export class PurchaseItemsService {
       // Update the item with the new quantity
       await this.itemRepository.update(
         { id: relatedItem.id },
-        { quantity: newQuantity }
+        { quantity: newQuantity },
       );
+
+      // Record bincard movement when stock actually changes
+      if (updatePurchaseItemDto.status === 'Received' || updatePurchaseItemDto.status === 'Cancelled') {
+        const movement: RecordBincardMovementDto = {
+          itemId: relatedItem.id,
+          movementType: updatePurchaseItemDto.status === 'Received' ? 'IN' : 'OUT',
+          quantity: purchaseItem.unit,
+          balanceAfter: newQuantity,
+          referenceType: 'PURCHASE',
+          referenceId: purchaseItem.purchaseId,
+          description:
+            updatePurchaseItemDto.status === 'Received'
+              ? `Purchase item received`
+              : `Purchase item cancelled – stock adjusted`,
+          uomId: purchaseItem.uomId,
+        };
+        await this.bincardService.recordMovement(movement);
+      }
 
       // Update the purchase item
       const updateData = {
