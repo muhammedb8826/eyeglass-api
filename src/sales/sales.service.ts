@@ -5,6 +5,7 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { Sale } from 'src/entities/sale.entity';
 import { Item } from 'src/entities/item.entity';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class SalesService {
@@ -49,6 +50,7 @@ export class SalesService {
 
       // Create sale items separately
       const saleItemsToCreate = saleItems.map(item => ({
+        id: randomUUID(),
         saleId: savedSale.id,
         itemId: item.itemId,
         uomId: item.uomId,
@@ -193,6 +195,7 @@ export class SalesService {
             .insert()
             .into('sale_items')
             .values({
+              id: randomUUID(),
               saleId: id,
               itemId: item.itemId,
               uomId: item.uomId,

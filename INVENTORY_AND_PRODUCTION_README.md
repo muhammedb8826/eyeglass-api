@@ -31,10 +31,13 @@ Each order line (`OrderItems`) includes:
   - `approvalStatus: string` (typically `"Pending"` / `"Approved"` / `"Rejected"`)
 - **Quality control (QC)**
   - `qualityControlStatus: "Pending" | "Passed" | "Failed"`
+ - **Store request / issue**
+   - `storeRequestStatus: "None" | "Requested" | "Issued"` – tracks whether a **store request** has been created and the **stock-out** has been completed for this line.
 
 Backend rules:
 
-- To move an item to **`InProgress`**, `approvalStatus` must be `"Approved"`.
+- To move an item to **`InProgress`**, `approvalStatus` must be `"Approved"`.  
+  (Enforcement of `storeRequestStatus = "Issued"` is the next step: the intention is that production only starts after the store has stocked out the required items, either from BOM components or from the ordered item itself when no BOM exists.)
 - To move an item to **`Delivered`**, `qualityControlStatus` must be `"Passed"` and payment rules (e.g. `forcePayment`) must be satisfied.
 
 The **order** status is derived from its items:
@@ -77,7 +80,7 @@ There is **no separate buffer** for operator stock; the system relies strictly o
 
 ---
 
-## 4. End‑to‑end flow to complete an order
+## 4. End‑to‑end flow to complete an order (with automatic store requests)
 
 For each order item:
 
@@ -88,25 +91,57 @@ For each order item:
    - Approver/supervisor reviews the line and sets `approvalStatus = "Approved"`.
    - Without this, the backend rejects attempts to move `status` to `"InProgress"`.
 
-3. **Store issues material**
-   - Lab technician or system raises a **store request** for the items needed for the lens.
-   - Store person checks `Item.quantity` and, if sufficient, **stocks out** the items to the lab (standard inventory flow).
+3. **Store request (automatic)**
+   - In the Notifications/Approved view, the lab technician clicks **Request items from store** for a line.
+   - Frontend calls:
+     - `PATCH /api/v1/order-items/:id` with:
+       - `storeRequestStatus = "Requested"`
+       - `operatorId = "<lab-operator-or-store-user-id>"`
+   - Backend behaviour in `OrderItemsService.update`:
+     - Detects transition `storeRequestStatus: "None" → "Requested"`.
+     - Automatically creates a **Sale** (internal store request) with:
+       - `series` like `SR-<order.series>-<timestamp>`
+       - `operatorId` from the payload
+       - `status = "Requested"`
+       - `totalQuantity` = the order item’s total quantity.
+     - Creates **SaleItems** for the request:
+       - If the item has a **BOM** (`item.bomLines`):
+         - For each BOM component:
+           - `itemId = bom.componentItemId`
+           - `uomId = bom.uomId`, `baseUomId = bom.uomId`
+           - `unit = quantity = bom.quantity × orderItem.quantity`
+           - `status = "Requested"`.
+       - If the item has **no BOM**:
+         - A single `SaleItem`:
+           - `itemId = orderItem.itemId`
+           - `uomId = orderItem.uomId`, `baseUomId = orderItem.baseUomId`
+           - `unit = quantity = orderItem.quantity`
+           - `status = "Requested"`.
 
-4. **Start production**
+4. **Store issues material**
+   - Store user processes the created **Sale** (store request) and, per line, sets:
+     - `status = "Stocked-out"` on the corresponding `SaleItems`.
+   - This:
+     - Decreases `Item.quantity` by `saleItem.unit`.
+     - Writes a **SALE / OUT** entry in `bincard` (see §6.2).
+   - Once store has issued items, the UI (or a dedicated backend process) should set the order item’s:
+     - `storeRequestStatus = "Issued"`.
+
+5. **Start production**
    - Lab technician calls `PATCH /api/v1/order-items/:id` with `status = "InProgress"` (and any other updates).
    - Backend checks:
      - `approvalStatus === "Approved"` (required).
-     - Does **not** perform stock checks here; assumes the store already issued items.
+     - `storeRequestStatus === "Issued"` (required – enforces that store has stocked out the items).
 
-5. **Finish production**
+6. **Finish production**
    - When the lens is ready, lab sets `status = "Ready"`.
 
-6. **Quality control**
+7. **Quality control**
    - QC process updates `qualityControlStatus` to:
      - `"Passed"` if the lens meets standards, or
      - `"Failed"` if it does not (item must be remade).
 
-7. **Delivery**
+8. **Delivery**
    - To deliver, lab/desk sets `status = "Delivered"`.
    - Backend enforces:
      - `qualityControlStatus === "Passed"`.
@@ -125,4 +160,55 @@ When **all** items are `Delivered`, the order automatically becomes `Delivered`.
   - Verify all items are **approved**.
   - Optionally confirm required store issues exist for the items.
   - Ensure lab tool and payment conditions are satisfied.
+
+---
+
+## 6. Bincard behavior (purchases and store issues)
+
+### 6.1 Purchases (`PurchaseItems`)
+
+When a **purchase item** status changes via `PATCH /api/v1/purchase-items/:id`:
+
+- `status = "Received"`:
+  - Increases `Item.quantity` by `purchaseItem.unit`.
+  - Writes a bincard entry:
+    - `movementType = "IN"`
+    - `referenceType = "PURCHASE"`
+    - `referenceId = purchaseItem.purchaseId`
+    - `quantity = purchaseItem.unit`
+    - `balanceAfter = new stock quantity`
+    - `uomId = purchaseItem.uomId`
+
+- `status = "Cancelled"`:
+  - Decreases `Item.quantity` by `purchaseItem.unit`.
+  - Writes a bincard entry:
+    - `movementType = "OUT"`
+    - `referenceType = "PURCHASE"`
+    - `referenceId = purchaseItem.purchaseId`
+    - `quantity = purchaseItem.unit`
+    - `balanceAfter = new stock quantity`
+
+### 6.2 Store issues to lab (`SaleItems`)
+
+When the store processes a **store request / internal issue** via `PATCH /api/v1/sale-items/:id`:
+
+- `status = "Stocked-out"` (issue to lab for production or sale):
+  - Decreases `Item.quantity` by `saleItem.unit`.
+  - Writes a bincard entry:
+    - `movementType = "OUT"`
+    - `referenceType = "SALE"`
+    - `referenceId = saleItem.saleId`
+    - `quantity = saleItem.unit`
+    - `balanceAfter = new stock quantity`
+
+- `status = "Cancelled"` (issue reversed, stock returned):
+  - Increases `Item.quantity` by `saleItem.unit`.
+  - Writes a bincard entry:
+    - `movementType = "IN"`
+    - `referenceType = "SALE"`
+    - `referenceId = saleItem.saleId`
+    - `quantity = saleItem.unit`
+    - `balanceAfter = new stock quantity`
+
+This ensures every **stock-in (purchase/return)** and **stock-out (issue to lab or sale)** is reflected both in `Item.quantity` and in the `bincard` history.
 

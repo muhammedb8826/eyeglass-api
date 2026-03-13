@@ -121,6 +121,10 @@ export class OrderItems {
   @Column({ default: 'Pending' })
   qualityControlStatus: string;
 
+  /** Store request/issue status for this line (e.g. None, Requested, Issued) */
+  @Column({ default: 'None' })
+  storeRequestStatus: string;
+
   @Column()
   uomId: string;
 

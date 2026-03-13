@@ -7,6 +7,8 @@ import { OrderItems } from 'src/entities/order-item.entity';
 import { Order } from 'src/entities/order.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
 import { OrdersService } from 'src/orders/orders.service';
+import { SalesService } from 'src/sales/sales.service';
+import { CreateSaleDto } from 'src/sales/dto/create-sale.dto';
 
 @Injectable()
 export class OrderItemsService {
@@ -19,6 +21,7 @@ export class OrderItemsService {
     private readonly paymentTermRepository: Repository<PaymentTerm>,
     private readonly dataSource: DataSource,
     private readonly ordersService: OrdersService,
+    private readonly salesService: SalesService,
   ) {}
 
   async create(createOrderItemDto: CreateOrderItemDto) {
@@ -185,7 +188,7 @@ export class OrderItemsService {
     try {
       const currentOrderItem = await this.orderItemsRepository.findOne({
         where: { id },
-        relations: ['item'],
+        relations: ['item', 'item.bomLines'],
       });
 
       if (!currentOrderItem) {
@@ -199,6 +202,8 @@ export class OrderItemsService {
       const nextStatus = updateOrderItemDto.status ?? currentOrderItem.status;
       const nextApprovalStatus =
         updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus;
+      const nextStoreRequestStatus =
+        updateOrderItemDto.storeRequestStatus ?? currentOrderItem.storeRequestStatus;
       if (
         nextStatus === 'InProgress' &&
         currentOrderItem.status !== 'InProgress' &&
@@ -206,6 +211,17 @@ export class OrderItemsService {
       ) {
         throw new ConflictException(
           'Cannot start production: order item is not approved. Set approvalStatus to "Approved" first.',
+        );
+      }
+
+      // Enforce store issue before starting production
+      if (
+        nextStatus === 'InProgress' &&
+        currentOrderItem.status !== 'InProgress' &&
+        nextStoreRequestStatus !== 'Issued'
+      ) {
+        throw new ConflictException(
+          'Store must issue the required items before production can start. Ensure storeRequestStatus is "Issued".',
         );
       }
 
@@ -255,6 +271,20 @@ export class OrderItemsService {
       const quantityLeft = hasPerEye ? parseFloat((updateOrderItemDto.quantityLeft ?? 0).toString()) : 0;
       const quantity = quantityRight + quantityLeft;
 
+      // Auto-create store request (Sale + SaleItems) when storeRequestStatus transitions to "Requested"
+      const prevStoreRequestStatus = currentOrderItem.storeRequestStatus;
+      if (
+        prevStoreRequestStatus === 'None' &&
+        nextStoreRequestStatus === 'Requested'
+      ) {
+        if (!updateOrderItemDto.operatorId) {
+          throw new ConflictException(
+            'operatorId is required to create a store request. Please include operatorId in the update payload.',
+          );
+        }
+        await this.createStoreRequestForOrderItem(currentOrderItem, updateOrderItemDto, quantity);
+      }
+
       // Update the order item
       await queryRunner.manager.update(OrderItems, id, {
         orderId: updateOrderItemDto.orderId,
@@ -288,6 +318,7 @@ export class OrderItemsService {
         adminApproval: updateOrderItemDto.adminApproval,
         approvalStatus: updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus,
         qualityControlStatus: newQualityControlStatus,
+        storeRequestStatus: nextStoreRequestStatus,
         uomId: updateOrderItemDto.uomId,
         unitPrice: parseFloat((updateOrderItemDto.unitPrice || 0).toString()),
         description: updateOrderItemDto.description,
@@ -339,6 +370,73 @@ export class OrderItemsService {
     await this.updateOrderStatus(orderId);
 
     return { message: `Order item with ID ${id} removed successfully` };
+  }
+
+  private async createStoreRequestForOrderItem(
+    orderItem: OrderItems,
+    dto: UpdateOrderItemDto,
+    quantity: number,
+  ) {
+    // Load order for context (series, etc.)
+    const order = await this.orderRepository.findOne({ where: { id: orderItem.orderId } });
+
+    const baseSeries = order?.series ?? orderItem.orderId;
+    const series = `SR-${baseSeries}-${Date.now()}`;
+
+    // Build sale items from BOM if present; otherwise from the parent item itself
+    const saleItems = [];
+    if (orderItem.item && Array.isArray((orderItem.item as any).bomLines) && (orderItem.item as any).bomLines.length > 0) {
+      for (const bom of (orderItem.item as any).bomLines) {
+        const unit = (bom.quantity || 0) * quantity;
+        if (unit <= 0) continue;
+        saleItems.push({
+          id: '',
+          itemId: bom.componentItemId,
+          uomId: bom.uomId,
+          baseUomId: bom.uomId,
+          quantity: unit,
+          unit,
+          description: `Store request for order ${baseSeries} – component of ${orderItem.itemId}`,
+          status: 'Requested',
+          saleItemNotes: [] as string[],
+          saleId: '' as string,
+        });
+      }
+    } else {
+      // No BOM: request the ordered item itself
+      if (quantity > 0) {
+        saleItems.push({
+          id: '',
+          itemId: orderItem.itemId,
+          uomId: orderItem.uomId,
+          baseUomId: orderItem.baseUomId,
+          quantity,
+          unit: quantity,
+          description: `Store request for order ${baseSeries} – item ${orderItem.itemId}`,
+          status: 'Requested',
+          saleItemNotes: [] as string[],
+          saleId: '' as string,
+        });
+      }
+    }
+
+    if (saleItems.length === 0) {
+      return;
+    }
+
+    const saleDto: CreateSaleDto = {
+      id: '' as any,
+      series,
+      operatorId: dto.operatorId as string,
+      status: 'Requested',
+      orderDate: new Date(),
+      reference: order?.id,
+      totalQuantity: quantity,
+      note: `Automatic store request for order ${baseSeries}`,
+      saleItems,
+    };
+
+    await this.salesService.create(saleDto);
   }
 
   private async updateOrderStatus(orderId: string, queryRunner?: any) {

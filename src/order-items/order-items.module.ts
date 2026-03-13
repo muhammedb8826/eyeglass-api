@@ -6,11 +6,13 @@ import { OrderItems } from 'src/entities/order-item.entity';
 import { Order } from 'src/entities/order.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
 import { OrdersModule } from 'src/orders/orders.module';
+import { SalesModule } from 'src/sales/sales.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([OrderItems, Order, PaymentTerm]),
     OrdersModule,
+    SalesModule,
   ],
   controllers: [OrderItemsController],
   providers: [OrderItemsService],
