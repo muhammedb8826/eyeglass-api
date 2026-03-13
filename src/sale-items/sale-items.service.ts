@@ -5,6 +5,7 @@ import { CreateSaleItemDto } from './dto/create-sale-item.dto';
 import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
 import { Item } from 'src/entities/item.entity';
+import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
 
 @Injectable()
 export class SaleItemsService {
@@ -13,6 +14,7 @@ export class SaleItemsService {
     private readonly saleItemRepository: Repository<SaleItems>,
     @InjectRepository(Item)
     private readonly itemRepository: Repository<Item>,
+    private readonly bincardService: BincardService,
   ) {}
 
   async create(createSaleItemDto: CreateSaleItemDto) {
@@ -95,6 +97,24 @@ export class SaleItemsService {
         status: updateSaleItemDto.status,
         unit: parseFloat(updateSaleItemDto.unit.toString()),
       });
+
+      // Record bincard movement when stock is actually issued or returned
+      if (updateSaleItemDto.status === 'Stocked-out' || updateSaleItemDto.status === 'Cancelled') {
+        const movement: RecordBincardMovementDto = {
+          itemId: relatedItem.id,
+          movementType: updateSaleItemDto.status === 'Stocked-out' ? 'OUT' : 'IN',
+          quantity: saleItem.unit,
+          balanceAfter: newQuantity,
+          referenceType: 'SALE',
+          referenceId: saleItem.saleId,
+          description:
+            updateSaleItemDto.status === 'Stocked-out'
+              ? 'Stocked-out for production/sale'
+              : 'Sale item cancelled – stock returned',
+          uomId: saleItem.uomId,
+        };
+        await this.bincardService.recordMovement(movement);
+      }
 
       return updatedSaleItem;
     });
