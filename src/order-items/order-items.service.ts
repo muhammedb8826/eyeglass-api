@@ -196,6 +196,13 @@ export class OrderItemsService {
         throw new NotFoundException('Order item not found');
       }
 
+      // Industry standard: delivered lines are posted and immutable
+      if (currentOrderItem.status === 'Delivered') {
+        throw new ConflictException(
+          'Delivered order items cannot be modified. Create a remake/replacement or a return/adjustment instead.',
+        );
+      }
+
       const newQualityControlStatus =
         updateOrderItemDto.qualityControlStatus ?? currentOrderItem.qualityControlStatus;
 

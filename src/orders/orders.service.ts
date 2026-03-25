@@ -659,6 +659,13 @@ export class OrdersService {
       throw new Error('Order not found');
     }
 
+    // Industry standard: delivered orders are posted and immutable
+    if (existingOrder.status === 'Delivered') {
+      throw new ConflictException(
+        'Delivered orders cannot be modified. Create a remake/replacement or a return/adjustment instead.',
+      );
+    }
+
     // Validate missing fields for commission
     if (commission) {
       if (!commission.salesPartnerId) {
