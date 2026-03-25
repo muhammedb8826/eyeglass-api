@@ -9,6 +9,7 @@ import { PaymentTerm } from 'src/entities/payment-term.entity';
 import { OrdersService } from 'src/orders/orders.service';
 import { SalesService } from 'src/sales/sales.service';
 import { CreateSaleDto } from 'src/sales/dto/create-sale.dto';
+import { SaleItems } from 'src/entities/sale-item.entity';
 
 @Injectable()
 export class OrderItemsService {
@@ -220,9 +221,23 @@ export class OrderItemsService {
         currentOrderItem.status !== 'InProgress' &&
         nextStoreRequestStatus !== 'Issued'
       ) {
+        // Fallback sync: if the store already stocked-out all linked sale items,
+        // auto-mark this order item as Issued and proceed.
+        const linkedSaleItems = await queryRunner.manager.find(SaleItems, {
+          where: { orderItemId: id as any },
+        });
+        const allStockedOut =
+          linkedSaleItems.length > 0 &&
+          linkedSaleItems.every(si => si.status === 'Stocked-out');
+        if (allStockedOut) {
+          await queryRunner.manager.update(OrderItems, { id }, { storeRequestStatus: 'Issued' });
+          // update local computed value so later update uses Issued
+          (updateOrderItemDto as any).storeRequestStatus = 'Issued';
+        } else {
         throw new ConflictException(
           'Store must issue the required items before production can start. Ensure storeRequestStatus is "Issued".',
         );
+        }
       }
 
       // Check payment verification based on forcePayment setting and status

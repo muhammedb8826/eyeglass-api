@@ -146,6 +146,7 @@ These live alongside the existing ordering fields:
 - `unitPrice`, `totalAmount`, `discount`, `level`, `status` (eyeglass standard: **Pending** → **InProgress** → **Ready** → **Delivered**; or **Cancelled**), etc.
 - `approvalStatus` – per-line approval (string, e.g. `"Approved"`).
 - `qualityControlStatus` – per-line QC (`"Pending"`, `"Passed"`, `"Failed"`). When `"Failed"`, the backend blocks status changes to `"Delivered"` so the lens must be remade and QC passed first.
+- `storeRequestStatus` – per-line store request/issue (`"None"`, `"Requested"`, `"Issued"`). Production (`status = "InProgress"`) is blocked until the store has issued materials and this becomes `"Issued"`.
 
 ### 4.3 Example order item in `orderItems[]`
 
@@ -167,6 +168,7 @@ These live alongside the existing ordering fields:
   "isDiscounted": false,
   "approvalStatus": "Pending",
   "qualityControlStatus": "Pending",
+  "storeRequestStatus": "None",
   "status": "Pending",
   "description": "SV lenses, AR coating",
 
@@ -200,6 +202,27 @@ Usage:
 
 - **Create order**: include objects like this in `orderItems[]` on `POST /api/v1/orders`.
 - **Update order item**: send the same fields to `PATCH /api/v1/order-items/:id`.
+
+### 4.3.1 Store request (automatic) before production
+
+To enforce industry-standard inventory flow (store issues materials before production):
+
+1. **Request items from store** (lab technician / approved tab)
+   - Call `PATCH /api/v1/order-items/:id` with:
+     - `storeRequestStatus = "Requested"`
+     - `operatorId = "<lab-tech-or-store-user-id>"`
+   - Backend automatically creates an internal **Sale** + **SaleItems** as the store request.
+     - If the item has **BOM**, the request is for BOM components (\(bom.quantity \times orderItem.quantity\)).
+     - If no BOM, the request is for the ordered item itself (quantity = order item quantity).
+
+2. **Store issues** the request
+   - Store sets the created `SaleItems.status = "Stocked-out"` in the store UI.
+   - When all linked sale items are stocked out, backend auto-updates the order item:
+     - `storeRequestStatus = "Issued"`
+
+3. **Start production**
+   - Only after `approvalStatus = "Approved"` and `storeRequestStatus = "Issued"` should the UI set:
+     - `status = "InProgress"`
 
 Backend will persist these values and return them in:
 
