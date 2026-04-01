@@ -269,7 +269,6 @@ export class OrdersService {
         deliveryDate: createOrderDto.deliveryDate ? new Date(createOrderDto.deliveryDate) : new Date(),
         orderSource: createOrderDto.orderSource,
         totalAmount: parseFloat((createOrderDto.totalAmount || 0).toString()),
-        tax: parseFloat((createOrderDto.tax || 0).toString()),
         grandTotal: parseFloat((createOrderDto.grandTotal || 0).toString()),
         totalQuantity: parseFloat((createOrderDto.totalQuantity || 0).toString()),
         internalNote: createOrderDto.internalNote,
@@ -378,8 +377,7 @@ export class OrdersService {
       // Recalculate order totals from the created items
       const recalculatedTotalAmount = orderItems.reduce((sum, oi) => sum + (oi.totalAmount || 0), 0);
       const recalculatedTotalQuantity = orderItems.reduce((sum, oi) => sum + (oi.quantity || 0), 0);
-      const tax = order.tax || 0;
-      const recalculatedGrandTotal = recalculatedTotalAmount + tax;
+      const recalculatedGrandTotal = recalculatedTotalAmount;
 
       await queryRunner.manager.update(Order, savedOrder.id, {
         totalAmount: recalculatedTotalAmount,
@@ -440,6 +438,17 @@ export class OrdersService {
           });
 
           await queryRunner.manager.save(PaymentTransaction, paymentTransactions);
+        }
+
+        if (paymentTermData.forcePayment && remainingAmount > 0) {
+          const anyApprovedLine = createOrderDto.orderItems.some(
+            oi => oi.approvalStatus === 'Approved',
+          );
+          if (createOrderDto.adminApproval || anyApprovedLine) {
+            throw new ConflictException(
+              'Cannot approve the order or any line while force payment is enabled until payment is complete.',
+            );
+          }
         }
       }
 
@@ -898,6 +907,28 @@ export class OrdersService {
       });
     }
 
+    const paymentTermForOrder = Array.isArray(existingOrder.paymentTerm)
+      ? existingOrder.paymentTerm[0]
+      : existingOrder.paymentTerm;
+
+    if (
+      paymentTermForOrder?.forcePayment &&
+      Number(paymentTermForOrder.remainingAmount) > 0
+    ) {
+      const orderApproving =
+        orderData.adminApproval === true && existingOrder.adminApproval !== true;
+      const anyLineApproving = orderItems.some(item => {
+        if (item.approvalStatus !== 'Approved') return false;
+        const prev = existingOrder.orderItems.find(oi => oi.id === item.id);
+        return !prev || prev.approvalStatus !== 'Approved';
+      });
+      if (orderApproving || anyLineApproving) {
+        throw new ConflictException(
+          `Cannot approve: force payment is active for this order and payment is not complete (remaining ${paymentTermForOrder.remainingAmount}).`,
+        );
+      }
+    }
+
     // Extract existing IDs for comparison
     const existingOrderItemIds = existingOrder.orderItems.map(item => item.id);
     const newOrderItemIds = orderItems.map(item => item.id);
@@ -917,7 +948,6 @@ export class OrdersService {
         deliveryDate: orderData.deliveryDate ? new Date(orderData.deliveryDate) : new Date(),
         orderSource: orderData.orderSource,
         totalAmount: parseFloat((orderData.totalAmount || 0).toString()),
-        tax: parseFloat((orderData.tax || 0).toString()),
         grandTotal: parseFloat((orderData.grandTotal || 0).toString()),
         totalQuantity: parseFloat((orderData.totalQuantity || 0).toString()),
         internalNote: orderData.internalNote,
@@ -1084,8 +1114,7 @@ export class OrdersService {
       const currentItems = await queryRunner.manager.find(OrderItems, { where: { orderId: id } });
       const recalculatedTotalAmount = currentItems.reduce((sum, oi) => sum + (oi.totalAmount || 0), 0);
       const recalculatedTotalQuantity = currentItems.reduce((sum, oi) => sum + (oi.quantity || 0), 0);
-      const tax = parseFloat((orderData.tax || 0).toString());
-      const recalculatedGrandTotal = recalculatedTotalAmount + tax;
+      const recalculatedGrandTotal = recalculatedTotalAmount;
       await queryRunner.manager.update(Order, id, {
         totalAmount: recalculatedTotalAmount,
         totalQuantity: recalculatedTotalQuantity,

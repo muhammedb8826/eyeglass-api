@@ -37,9 +37,6 @@ export class Order {
   totalAmount: number;
 
   @Column('float')
-  tax: number;
-
-  @Column('float')
   grandTotal: number;
 
   @Column()

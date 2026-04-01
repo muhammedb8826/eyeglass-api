@@ -212,6 +212,26 @@ export class OrderItemsService {
         updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus;
       const nextStoreRequestStatus =
         updateOrderItemDto.storeRequestStatus ?? currentOrderItem.storeRequestStatus;
+
+      const orderIdForPayment = currentOrderItem.orderId;
+      const orderPayment = await this.paymentTermRepository.findOne({
+        where: { orderId: orderIdForPayment },
+      });
+
+      const transitioningToApproved =
+        nextApprovalStatus === 'Approved' &&
+        currentOrderItem.approvalStatus !== 'Approved';
+
+      if (
+        transitioningToApproved &&
+        orderPayment?.forcePayment &&
+        Number(orderPayment.remainingAmount) > 0
+      ) {
+        throw new ConflictException(
+          `Cannot approve this line: force payment is enabled for the order and payment is not complete (remaining ${orderPayment.remainingAmount}).`,
+        );
+      }
+
       if (
         nextStatus === 'InProgress' &&
         currentOrderItem.status !== 'InProgress' &&
@@ -247,36 +267,37 @@ export class OrderItemsService {
         }
       }
 
-      // Check payment verification based on forcePayment setting and status
-      const orderPayment = await this.paymentTermRepository.findOne({
-        where: { orderId: updateOrderItemDto.orderId },
-        relations: ['order'],
-      });
-
+      // Check payment verification based on forcePayment and line status changes
       if (orderPayment) {
         console.log('Payment verification:', {
-          orderId: updateOrderItemDto.orderId,
+          orderId: orderIdForPayment,
           newStatus: updateOrderItemDto.status,
           forcePayment: orderPayment.forcePayment,
           remainingAmount: orderPayment.remainingAmount,
-          totalAmount: orderPayment.totalAmount
+          totalAmount: orderPayment.totalAmount,
         });
 
-        // Check payment when status changes to "Delivered" - only if forcePayment is true
-        if (updateOrderItemDto.status === 'Delivered' && orderPayment.forcePayment && orderPayment.remainingAmount > 0) {
-          throw new ConflictException(
-            `Payment is not completed. Cannot deliver order with outstanding payment of ${orderPayment.remainingAmount}.`
-          );
-        }
-        
-        // For other status changes, only block if forcePayment is true and payment is not paid at all
+        // Delivered: full payment required when forcePayment is on
         if (
+          updateOrderItemDto.status === 'Delivered' &&
           orderPayment.forcePayment &&
-          orderPayment.remainingAmount === orderPayment.totalAmount && // Not paid at all
-          updateOrderItemDto.status !== 'Delivered'
+          Number(orderPayment.remainingAmount) > 0
         ) {
           throw new ConflictException(
-            `Payment is not completed. Cannot change status to "${updateOrderItemDto.status}" because force payment is enabled and no payment has been made.`
+            `Payment is not completed. Cannot deliver order with outstanding payment of ${orderPayment.remainingAmount}.`,
+          );
+        }
+
+        // Other workflow status changes: block if forcePayment and no payment at all (skip when only patching non-status fields)
+        const newWorkflowStatus = updateOrderItemDto.status;
+        if (
+          newWorkflowStatus !== undefined &&
+          orderPayment.forcePayment &&
+          Number(orderPayment.remainingAmount) === Number(orderPayment.totalAmount) &&
+          newWorkflowStatus !== 'Delivered'
+        ) {
+          throw new ConflictException(
+            `Payment is not completed. Cannot change status to "${newWorkflowStatus}" because force payment is enabled and no payment has been made.`,
           );
         }
       }

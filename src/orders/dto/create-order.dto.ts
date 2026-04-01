@@ -15,7 +15,6 @@ export class CreateOrderDto {
   orderSource: string;
   deliveryDate: Date;
   totalAmount: number;
-  tax: number;
   grandTotal: number;
   totalQuantity: number;
   internalNote?: string;

@@ -72,7 +72,6 @@ Via `CreateOrderDto` / `UpdateOrderDto`:
   "orderSource": "WEB",
   "deliveryDate": "2025-03-05T00:00:00.000Z",
   "totalAmount": 0,
-  "tax": 0,
   "grandTotal": 0,
   "totalQuantity": 0,
   "internalNote": "High-priority job",
@@ -82,6 +81,8 @@ Via `CreateOrderDto` / `UpdateOrderDto`:
   ]
 }
 ```
+
+Orders do **not** use a separate tax or VAT field. After items are saved, the API recalculates `totalAmount` and `grandTotal` from line `totalAmount` values (they match; no tax is added).
 
 For `PATCH /api/v1/orders/:id`, send the same fields inside the body; omitted fields stay unchanged.
 
