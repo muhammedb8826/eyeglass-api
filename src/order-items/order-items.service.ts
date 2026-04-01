@@ -237,13 +237,16 @@ export class OrderItemsService {
         nextApprovalStatus === 'Approved' &&
         currentOrderItem.approvalStatus !== 'Approved';
 
+      const forcePaymentIncompleteForApproval =
+        !!orderPayment?.forcePayment &&
+        (Number(orderPayment.totalAmount) <= 0 || Number(orderPayment.remainingAmount) > 0);
+
       if (
         transitioningToApproved &&
-        orderPayment?.forcePayment &&
-        Number(orderPayment.remainingAmount) > 0
+        forcePaymentIncompleteForApproval
       ) {
         throw new ConflictException(
-          `Cannot approve this line: force payment is enabled for the order and payment is not complete (remaining ${orderPayment.remainingAmount}).`,
+          `Cannot approve this line: force payment is enabled and payment is not complete (total ${orderPayment?.totalAmount ?? 0}, remaining ${orderPayment?.remainingAmount ?? 0}).`,
         );
       }
 
@@ -296,10 +299,10 @@ export class OrderItemsService {
         if (
           nextStatus === 'Delivered' &&
           orderPayment.forcePayment &&
-          Number(orderPayment.remainingAmount) > 0
+          (Number(orderPayment.totalAmount) <= 0 || Number(orderPayment.remainingAmount) > 0)
         ) {
           throw new ConflictException(
-            `Payment is not completed. Cannot deliver order with outstanding payment of ${orderPayment.remainingAmount}.`,
+            `Payment is not completed. Cannot deliver order (total ${orderPayment.totalAmount}, remaining ${orderPayment.remainingAmount}).`,
           );
         }
 
@@ -325,9 +328,20 @@ export class OrderItemsService {
         );
       }
 
-      const hasPerEye = updateOrderItemDto.quantityRight !== undefined || updateOrderItemDto.quantityLeft !== undefined;
-      const quantityRight = hasPerEye ? parseFloat((updateOrderItemDto.quantityRight ?? 0).toString()) : parseFloat((updateOrderItemDto.quantity ?? 0).toString());
-      const quantityLeft = hasPerEye ? parseFloat((updateOrderItemDto.quantityLeft ?? 0).toString()) : 0;
+      // Preserve existing quantities when PATCH does not include quantity fields.
+      const hasPerEye =
+        updateOrderItemDto.quantityRight !== undefined || updateOrderItemDto.quantityLeft !== undefined;
+      const hasLegacyQuantity = updateOrderItemDto.quantity !== undefined;
+      const quantityRight = hasPerEye
+        ? parseFloat((updateOrderItemDto.quantityRight ?? currentOrderItem.quantityRight ?? 0).toString())
+        : hasLegacyQuantity
+          ? parseFloat((updateOrderItemDto.quantity ?? 0).toString())
+          : parseFloat((currentOrderItem.quantityRight ?? currentOrderItem.quantity ?? 0).toString());
+      const quantityLeft = hasPerEye
+        ? parseFloat((updateOrderItemDto.quantityLeft ?? currentOrderItem.quantityLeft ?? 0).toString())
+        : hasLegacyQuantity
+          ? 0
+          : parseFloat((currentOrderItem.quantityLeft ?? 0).toString());
       const quantity = quantityRight + quantityLeft;
 
       const prevStoreRequestStatus = currentOrderItem.storeRequestStatus;

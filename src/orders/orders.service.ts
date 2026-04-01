@@ -440,7 +440,7 @@ export class OrdersService {
           await queryRunner.manager.save(PaymentTransaction, paymentTransactions);
         }
 
-        if (paymentTermData.forcePayment && remainingAmount > 0) {
+        if (paymentTermData.forcePayment && (Number(paymentTermData.totalAmount || 0) <= 0 || remainingAmount > 0)) {
           const anyApprovedLine = createOrderDto.orderItems.some(
             oi => oi.approvalStatus === 'Approved',
           );
@@ -913,7 +913,7 @@ export class OrdersService {
 
     if (
       paymentTermForOrder?.forcePayment &&
-      Number(paymentTermForOrder.remainingAmount) > 0
+      (Number(paymentTermForOrder.totalAmount) <= 0 || Number(paymentTermForOrder.remainingAmount) > 0)
     ) {
       const orderApproving =
         orderData.adminApproval === true && existingOrder.adminApproval !== true;
