@@ -141,7 +141,13 @@ For each order item:
 7. **Quality control**
    - QC process updates `qualityControlStatus` to:
      - `"Passed"` if the lens meets standards, or
-     - `"Failed"` if it does not (item must be remade).
+     - `"Failed"` if it does not (broken lens, surfacing error, etc.).
+   - **QC failure → remake + new store request (backend):** when a line is updated with `qualityControlStatus: "Failed"` (and it was not already `Failed`), the API **rewinds** that line so production can restart **without** supervisor re-approval:
+     - `status` → `"Pending"`
+     - `approvalStatus` → `"Approved"`
+     - `qualityControlStatus` → `"Pending"` (ready for QC again after the new lens is made)
+     - **Store request:** If the payload includes **`operatorId`**, the API sets `storeRequestStatus` to **`"Requested"`** and **creates a new internal Sale** (new `series`, new `SaleItems`) — same as a manual “request from store”. **Each QC failure handled this way produces another Sale**, so five failures with five `operatorId` calls → five store requests. If **`operatorId`** is omitted, `storeRequestStatus` becomes **`"None"`** and the lab must PATCH `Requested` + `operatorId` in a follow-up call (that transition also creates a **new** Sale each time from `None`).
+     Record the failure reason in **order item notes** if you need an audit trail; the stored QC field is reset for the next cycle.
 
 8. **Delivery**
    - To deliver, lab/desk sets `status = "Delivered"`.

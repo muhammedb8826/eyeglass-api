@@ -203,15 +203,29 @@ export class OrderItemsService {
         );
       }
 
-      const newQualityControlStatus =
+      /** QC rejects lens (broken, etc.): rewind line for remake — new store request → production → QC again. */
+      const qcFailureRemake =
+        updateOrderItemDto.qualityControlStatus === 'Failed' &&
+        currentOrderItem.qualityControlStatus !== 'Failed';
+
+      let nextStatus = updateOrderItemDto.status ?? currentOrderItem.status;
+      let nextApprovalStatus =
+        updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus;
+      let nextStoreRequestStatus =
+        updateOrderItemDto.storeRequestStatus ?? currentOrderItem.storeRequestStatus;
+      let newQualityControlStatus =
         updateOrderItemDto.qualityControlStatus ?? currentOrderItem.qualityControlStatus;
 
-      // Enforce approval before starting production
-      const nextStatus = updateOrderItemDto.status ?? currentOrderItem.status;
-      const nextApprovalStatus =
-        updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus;
-      const nextStoreRequestStatus =
-        updateOrderItemDto.storeRequestStatus ?? currentOrderItem.storeRequestStatus;
+      if (qcFailureRemake) {
+        nextStatus = 'Pending';
+        nextApprovalStatus = 'Approved';
+        newQualityControlStatus = 'Pending';
+        // New material needed for remake: either open a new store request in this call (operatorId + Requested)
+        // or leave None and the lab PATCHes Requested again (each path creates a separate Sale).
+        nextStoreRequestStatus = updateOrderItemDto.operatorId?.trim()
+          ? 'Requested'
+          : 'None';
+      }
 
       const orderIdForPayment = currentOrderItem.orderId;
       const orderPayment = await this.paymentTermRepository.findOne({
@@ -219,6 +233,7 @@ export class OrderItemsService {
       });
 
       const transitioningToApproved =
+        !qcFailureRemake &&
         nextApprovalStatus === 'Approved' &&
         currentOrderItem.approvalStatus !== 'Approved';
 
@@ -279,7 +294,7 @@ export class OrderItemsService {
 
         // Delivered: full payment required when forcePayment is on
         if (
-          updateOrderItemDto.status === 'Delivered' &&
+          nextStatus === 'Delivered' &&
           orderPayment.forcePayment &&
           Number(orderPayment.remainingAmount) > 0
         ) {
@@ -291,6 +306,7 @@ export class OrderItemsService {
         // Other workflow status changes: block if forcePayment and no payment at all (skip when only patching non-status fields)
         const newWorkflowStatus = updateOrderItemDto.status;
         if (
+          !qcFailureRemake &&
           newWorkflowStatus !== undefined &&
           orderPayment.forcePayment &&
           Number(orderPayment.remainingAmount) === Number(orderPayment.totalAmount) &&
@@ -314,13 +330,20 @@ export class OrderItemsService {
       const quantityLeft = hasPerEye ? parseFloat((updateOrderItemDto.quantityLeft ?? 0).toString()) : 0;
       const quantity = quantityRight + quantityLeft;
 
-      // Auto-create store request (Sale + SaleItems) when storeRequestStatus transitions to "Requested"
       const prevStoreRequestStatus = currentOrderItem.storeRequestStatus;
-      if (
+      const qcFailureOpensNewStoreRequest =
+        qcFailureRemake &&
+        nextStoreRequestStatus === 'Requested' &&
+        !!updateOrderItemDto.operatorId?.trim();
+
+      // New Sale + SaleItems: (1) QC fail remake with operatorId, or (2) None → Requested (first or repeat after None)
+      if (qcFailureOpensNewStoreRequest) {
+        await this.createStoreRequestForOrderItem(currentOrderItem, updateOrderItemDto, quantity);
+      } else if (
         prevStoreRequestStatus === 'None' &&
         nextStoreRequestStatus === 'Requested'
       ) {
-        if (!updateOrderItemDto.operatorId) {
+        if (!updateOrderItemDto.operatorId?.trim()) {
           throw new ConflictException(
             'operatorId is required to create a store request. Please include operatorId in the update payload.',
           );
@@ -328,9 +351,11 @@ export class OrderItemsService {
         await this.createStoreRequestForOrderItem(currentOrderItem, updateOrderItemDto, quantity);
       }
 
+      const effectiveOrderId = updateOrderItemDto.orderId ?? currentOrderItem.orderId;
+
       // Update the order item
       await queryRunner.manager.update(OrderItems, id, {
-        orderId: updateOrderItemDto.orderId,
+        orderId: effectiveOrderId,
         itemId: updateOrderItemDto.itemId,
         itemBaseId: updateOrderItemDto.itemBaseId ?? undefined,
         quantity,
@@ -359,25 +384,25 @@ export class OrderItemsService {
         lensIndex: updateOrderItemDto.lensIndex,
         totalAmount: parseFloat((updateOrderItemDto.totalAmount || 0).toString()),
         adminApproval: updateOrderItemDto.adminApproval,
-        approvalStatus: updateOrderItemDto.approvalStatus ?? currentOrderItem.approvalStatus,
+        approvalStatus: nextApprovalStatus,
         qualityControlStatus: newQualityControlStatus,
         storeRequestStatus: nextStoreRequestStatus,
         uomId: updateOrderItemDto.uomId,
         unitPrice: parseFloat((updateOrderItemDto.unitPrice || 0).toString()),
         description: updateOrderItemDto.description,
         isDiscounted: updateOrderItemDto.isDiscounted,
-        status: updateOrderItemDto.status,
+        status: nextStatus,
         pricingId: updateOrderItemDto.pricingId,
         unit: parseFloat((updateOrderItemDto.unit || 0).toString()),
         baseUomId: updateOrderItemDto.baseUomId,
       });
 
       // Update order status based on all order items
-      await this.updateOrderStatus(updateOrderItemDto.orderId, queryRunner);
+      await this.updateOrderStatus(effectiveOrderId, queryRunner);
 
       // Re-validate lab tools for the whole order (per-eye: only eyes with quantityRight/quantityLeft > 0)
       const orderItemsForCheck = await queryRunner.manager.find(OrderItems, {
-        where: { orderId: updateOrderItemDto.orderId },
+        where: { orderId: effectiveOrderId },
       });
       await this.ordersService.ensureLabToolsAvailableForOrderItems(orderItemsForCheck);
 
