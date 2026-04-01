@@ -224,7 +224,18 @@ Many list endpoints support pagination via query params:
 | GET | `/orders/profit/filtered` | Required | Get filtered profit |
 | GET | `/orders/report/company` | Required | Company report |
 
-**Order list query params:** `page`, `limit`, `search`, `startDate`, `endDate`, `item1`, `item2`, `item3`
+**Order list query params (`GET /orders`):**
+
+- **Pagination:** `page`, `limit`
+- **Text:** `search` (series, customer name/phone, line description, payment/commission refs, sales partner)
+- **Status:** `status` — comma-separated (e.g. `Pending`, `Pending,Processing,Ready`)
+- **Dates:** `dateField` — which column presets/range use: `orderDate` (default), `createdAt`, `deliveryDate`
+- **Custom range:** `startDate`, `endDate` — ISO or `YYYY-MM-DD` (date-only is start/end of local calendar day). Either bound may be omitted. If either is set, **custom range wins** over `datePreset`.
+- **Presets (local calendar):** `datePreset` — `today`, `this_week`, `this_month`, `last_week`, `last_month` (hyphens allowed, e.g. `this-week`)
+- **Sort:** `sortBy` — `createdAt` (default), `orderDate`, `deliveryDate`, `grandTotal`; `sortOrder` — `ASC` or `DESC` (default `DESC`)
+- **Other:** `customerId`; `minGrandTotal`, `maxGrandTotal`; `item1`, `item2`, `item3` (line item name contains)
+
+Response shape unchanged: `{ orders, total, grandTotalSum }` (filters apply to `grandTotalSum` as well).
 
 ### Order Items
 

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException, BadRequestException, HttpException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, In, IsNull } from 'typeorm';
+import { Repository, DataSource, In, IsNull, SelectQueryBuilder } from 'typeorm';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { Order } from '../entities/order.entity';
@@ -16,6 +16,35 @@ import { ItemBase } from 'src/entities/item-base.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolService } from 'src/lab-tool/lab-tool.service';
+import {
+  isValidDatePreset,
+  OrderDatePreset,
+  OrderListDateField,
+  OrderListSortField,
+  parseStatusQuery,
+  resolveOrderDateFilter,
+  ResolvedOrderDateFilter,
+} from './utils/order-list-filters.util';
+
+export type OrderListQueryInput = {
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  /** today | this_week | this_month | last_week | last_month (hyphens allowed) */
+  datePreset?: string;
+  /** Which timestamp column presets / custom range apply to (default orderDate) */
+  dateField?: string;
+  /** Comma-separated, e.g. Pending,Processing */
+  status?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  customerId?: string;
+  minGrandTotal?: string;
+  maxGrandTotal?: string;
+  item1?: string;
+  item2?: string;
+  item3?: string;
+};
 
 @Injectable()
 export class OrdersService {
@@ -485,7 +514,224 @@ export class OrdersService {
     }
   }
 
-  async findAll(skip: number, take: number, search?: string, startDate?: string, endDate?: string, item1?: string, item2?: string, item3?: string) {
+  private parseOrderListQuery(raw: OrderListQueryInput): {
+    applyOpts: {
+      search?: string;
+      includeOrderIdInSearch: boolean;
+      statuses?: string[];
+      dateFilter: ResolvedOrderDateFilter | null;
+      orderItemNames: string[];
+      customerId?: string;
+      minGrandTotal?: number;
+      maxGrandTotal?: number;
+    };
+    sortBy: OrderListSortField;
+    sortOrder: 'ASC' | 'DESC';
+  } {
+    const DATE_FIELDS: OrderListDateField[] = ['orderDate', 'createdAt', 'deliveryDate'];
+    let dateField: OrderListDateField = 'orderDate';
+    if (raw.dateField?.trim()) {
+      const df = raw.dateField.trim() as OrderListDateField;
+      if (!DATE_FIELDS.includes(df)) {
+        throw new BadRequestException(
+          `Invalid dateField. Use one of: ${DATE_FIELDS.join(', ')}`,
+        );
+      }
+      dateField = df;
+    }
+
+    let datePreset: OrderDatePreset | undefined;
+    if (raw.datePreset?.trim()) {
+      const normalized = raw.datePreset.trim().toLowerCase().replace(/-/g, '_');
+      if (!isValidDatePreset(normalized)) {
+        throw new BadRequestException(
+          'Invalid datePreset. Use: today, this_week, this_month, last_week, last_month.',
+        );
+      }
+      datePreset = normalized;
+    }
+
+    const SORT_FIELDS: OrderListSortField[] = ['createdAt', 'orderDate', 'deliveryDate', 'grandTotal'];
+    let sortBy: OrderListSortField = 'createdAt';
+    if (raw.sortBy?.trim()) {
+      const sb = raw.sortBy.trim() as OrderListSortField;
+      if (!SORT_FIELDS.includes(sb)) {
+        throw new BadRequestException(`Invalid sortBy. Use one of: ${SORT_FIELDS.join(', ')}`);
+      }
+      sortBy = sb;
+    }
+
+    let sortOrder: 'ASC' | 'DESC' = 'DESC';
+    if (raw.sortOrder?.trim()) {
+      const so = raw.sortOrder.trim().toUpperCase();
+      if (so !== 'ASC' && so !== 'DESC') {
+        throw new BadRequestException('sortOrder must be ASC or DESC');
+      }
+      sortOrder = so as 'ASC' | 'DESC';
+    }
+
+    const statuses = parseStatusQuery(raw.status);
+    const dateFilter = resolveOrderDateFilter({
+      dateField,
+      startDate: raw.startDate,
+      endDate: raw.endDate,
+      datePreset,
+    });
+
+    const orderItemNames = [raw.item1, raw.item2, raw.item3].filter(Boolean) as string[];
+
+    let minGrandTotal: number | undefined;
+    let maxGrandTotal: number | undefined;
+    if (raw.minGrandTotal !== undefined && String(raw.minGrandTotal).trim() !== '') {
+      const n = Number(raw.minGrandTotal);
+      if (Number.isNaN(n)) {
+        throw new BadRequestException('minGrandTotal must be a number');
+      }
+      minGrandTotal = n;
+    }
+    if (raw.maxGrandTotal !== undefined && String(raw.maxGrandTotal).trim() !== '') {
+      const n = Number(raw.maxGrandTotal);
+      if (Number.isNaN(n)) {
+        throw new BadRequestException('maxGrandTotal must be a number');
+      }
+      maxGrandTotal = n;
+    }
+
+    return {
+      applyOpts: {
+        search: raw.search?.trim() || undefined,
+        includeOrderIdInSearch: false,
+        statuses,
+        dateFilter,
+        orderItemNames,
+        customerId: raw.customerId?.trim() || undefined,
+        minGrandTotal,
+        maxGrandTotal,
+      },
+      sortBy,
+      sortOrder,
+    };
+  }
+
+  private applyOrderListFilters(
+    queryBuilder: SelectQueryBuilder<Order>,
+    opts: {
+      search?: string;
+      includeOrderIdInSearch: boolean;
+      statuses?: string[];
+      dateFilter: ResolvedOrderDateFilter | null;
+      orderItemNames: string[];
+      customerId?: string;
+      minGrandTotal?: number;
+      maxGrandTotal?: number;
+    },
+  ): void {
+    let hasWhere = false;
+
+    const searchSql = opts.includeOrderIdInSearch
+      ? '(order.id::text LIKE :search OR order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)'
+      : '(order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)';
+
+    if (opts.search) {
+      queryBuilder.where(searchSql, { search: `%${opts.search}%` });
+      hasWhere = true;
+    }
+
+    if (opts.statuses?.length) {
+      const clause = 'order.status IN (:...orderStatuses)';
+      if (hasWhere) {
+        queryBuilder.andWhere(clause, { orderStatuses: opts.statuses });
+      } else {
+        queryBuilder.where(clause, { orderStatuses: opts.statuses });
+        hasWhere = true;
+      }
+    }
+
+    if (opts.customerId) {
+      const clause = 'order.customerId = :filterCustomerId';
+      if (hasWhere) {
+        queryBuilder.andWhere(clause, { filterCustomerId: opts.customerId });
+      } else {
+        queryBuilder.where(clause, { filterCustomerId: opts.customerId });
+        hasWhere = true;
+      }
+    }
+
+    if (opts.minGrandTotal !== undefined && Number.isFinite(opts.minGrandTotal)) {
+      const clause = 'order.grandTotal >= :minGrandTotal';
+      if (hasWhere) {
+        queryBuilder.andWhere(clause, { minGrandTotal: opts.minGrandTotal });
+      } else {
+        queryBuilder.where(clause, { minGrandTotal: opts.minGrandTotal });
+        hasWhere = true;
+      }
+    }
+
+    if (opts.maxGrandTotal !== undefined && Number.isFinite(opts.maxGrandTotal)) {
+      const clause = 'order.grandTotal <= :maxGrandTotal';
+      if (hasWhere) {
+        queryBuilder.andWhere(clause, { maxGrandTotal: opts.maxGrandTotal });
+      } else {
+        queryBuilder.where(clause, { maxGrandTotal: opts.maxGrandTotal });
+        hasWhere = true;
+      }
+    }
+
+    if (opts.dateFilter) {
+      const { columnSql, start, end } = opts.dateFilter;
+      if (start && end) {
+        const clause = `${columnSql} BETWEEN :filterDateStart AND :filterDateEnd`;
+        if (hasWhere) {
+          queryBuilder.andWhere(clause, { filterDateStart: start, filterDateEnd: end });
+        } else {
+          queryBuilder.where(clause, { filterDateStart: start, filterDateEnd: end });
+          hasWhere = true;
+        }
+      } else if (start) {
+        const clause = `${columnSql} >= :filterDateStart`;
+        if (hasWhere) {
+          queryBuilder.andWhere(clause, { filterDateStart: start });
+        } else {
+          queryBuilder.where(clause, { filterDateStart: start });
+          hasWhere = true;
+        }
+      } else if (end) {
+        const clause = `${columnSql} <= :filterDateEnd`;
+        if (hasWhere) {
+          queryBuilder.andWhere(clause, { filterDateEnd: end });
+        } else {
+          queryBuilder.where(clause, { filterDateEnd: end });
+          hasWhere = true;
+        }
+      }
+    }
+
+    if (opts.orderItemNames.length > 0) {
+      const itemConditions = opts.orderItemNames
+        .map((_, index) => `orderItemsItem.name LIKE :listItem${index}`)
+        .join(' OR ');
+      if (hasWhere) {
+        queryBuilder.andWhere(`(${itemConditions})`);
+      } else {
+        queryBuilder.where(`(${itemConditions})`);
+        hasWhere = true;
+      }
+      opts.orderItemNames.forEach((name, index) => {
+        queryBuilder.setParameter(`listItem${index}`, `%${name}%`);
+      });
+    }
+  }
+
+  async findAll(skip: number, take: number, query: OrderListQueryInput = {}) {
+    const { applyOpts, sortBy, sortOrder } = this.parseOrderListQuery(query);
+
+    const sortColumnMap: Record<OrderListSortField, string> = {
+      createdAt: 'order.createdAt',
+      orderDate: 'order.orderDate',
+      deliveryDate: 'order.deliveryDate',
+      grandTotal: 'order.grandTotal',
+    };
+
     const queryBuilder = this.orderRepository
       .createQueryBuilder('order')
       .leftJoinAndSelect('order.customer', 'customer')
@@ -499,46 +745,14 @@ export class OrdersService {
       .leftJoinAndSelect('order.commission', 'commission')
       .leftJoinAndSelect('commission.transactions', 'commissionTransactions')
       .leftJoinAndSelect('order.salesPartner', 'salesPartner')
-      .orderBy('order.createdAt', 'DESC')
+      .orderBy(sortColumnMap[sortBy], sortOrder)
       .skip(Number(skip))
       .take(Number(take));
 
-    // Handle search filter
-    if (search) {
-      // Text-based search (avoid LIKE on UUID columns for Postgres)
-      queryBuilder.where(
-        '(order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)',
-        { search: `%${search}%` },
-      );
-    }
-
-    // Handle date range filter
-    if (startDate && endDate) {
-      queryBuilder.andWhere('order.orderDate BETWEEN :startDate AND :endDate', {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-      });
-    }
-
-    // Collect the provided item names into an array
-    const orderItemNames = [item1, item2, item3].filter(Boolean);
-
-    // Handle order item names filter
-    if (orderItemNames.length > 0) {
-      const itemConditions = orderItemNames.map((name, index) => 
-        `orderItemsItem.name LIKE :item${index}`
-      ).join(' OR ');
-      
-      queryBuilder.andWhere(`(${itemConditions})`);
-      
-      orderItemNames.forEach((name, index) => {
-        queryBuilder.setParameter(`item${index}`, `%${name}%`);
-      });
-    }
+    this.applyOrderListFilters(queryBuilder, applyOpts);
 
     const [orders, total] = await queryBuilder.getManyAndCount();
 
-    // Calculate grand total sum using a separate query for better performance
     const grandTotalQuery = this.orderRepository
       .createQueryBuilder('order')
       .leftJoin('order.customer', 'customer')
@@ -554,32 +768,7 @@ export class OrdersService {
       .leftJoin('order.salesPartner', 'salesPartner')
       .select('SUM(order.grandTotal)', 'grandTotalSum');
 
-    // Apply the same filters to the sum query
-    if (search) {
-      grandTotalQuery.where(
-        '(order.series LIKE :search OR customer.fullName LIKE :search OR customer.phone LIKE :search OR orderItems.description LIKE :search OR paymentTransactions.reference LIKE :search OR commissionTransactions.reference LIKE :search OR salesPartner.fullName LIKE :search)',
-        { search: `%${search}%` },
-      );
-    }
-
-    if (startDate && endDate) {
-      grandTotalQuery.andWhere('order.orderDate BETWEEN :startDate AND :endDate', {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-      });
-    }
-
-    if (orderItemNames.length > 0) {
-      const itemConditions = orderItemNames.map((name, index) => 
-        `orderItemsItem.name LIKE :item${index}`
-      ).join(' OR ');
-      
-      grandTotalQuery.andWhere(`(${itemConditions})`);
-      
-      orderItemNames.forEach((name, index) => {
-        grandTotalQuery.setParameter(`item${index}`, `%${name}%`);
-      });
-    }
+    this.applyOrderListFilters(grandTotalQuery, applyOpts);
 
     const grandTotalResult = await grandTotalQuery.getRawOne();
     const grandTotalSum = grandTotalResult?.grandTotalSum || 0;

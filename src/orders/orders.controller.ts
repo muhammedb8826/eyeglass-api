@@ -40,13 +40,36 @@ export class OrdersController {
     @Query('search') search?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('datePreset') datePreset?: string,
+    @Query('dateField') dateField?: string,
+    @Query('status') status?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+    @Query('customerId') customerId?: string,
+    @Query('minGrandTotal') minGrandTotal?: string,
+    @Query('maxGrandTotal') maxGrandTotal?: string,
     @Query('item1') item1?: string,
     @Query('item2') item2?: string,
     @Query('item3') item3?: string,
   ) {
-    const skip = (page - 1) * limit
-    const take = limit
-    return this.ordersService.findAll(skip, take, search, startDate, endDate, item1, item2, item3);
+    const skip = (page - 1) * limit;
+    const take = limit;
+    return this.ordersService.findAll(skip, take, {
+      search,
+      startDate,
+      endDate,
+      datePreset,
+      dateField,
+      status,
+      sortBy,
+      sortOrder,
+      customerId,
+      minGrandTotal,
+      maxGrandTotal,
+      item1,
+      item2,
+      item3,
+    });
   }
 
   @Public()

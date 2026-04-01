@@ -62,7 +62,7 @@ Via `CreateOrderDto` / `UpdateOrderDto`:
 
 ```json
 {
-  "series": "ORD-2025-0001",
+  "series": "NDS-2026-0001",
   "customerId": "uuid-of-customer",
   "status": "Pending",
   "orderDate": "2025-03-01T10:00:00.000Z",

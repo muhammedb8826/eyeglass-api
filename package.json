@@ -1,7 +1,7 @@
 {
-  "name": "lens-backend",
+  "name": "nds-backend",
   "version": "1.0.0",
-  "description": "NestJS backend application for the LENS project.",
+  "description": "NestJS backend application for the NDS project.",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {

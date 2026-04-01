@@ -86,7 +86,7 @@ Example fragment from `GET /api/v1/orders/:id` (one order item only, simplified)
 ```json
 {
   "id": "order-id",
-  "series": "LENS-2026-0001",
+  "series": "NDS-2026-0001",
   "orderItems": [
     {
       "id": "order-item-id",

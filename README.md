@@ -1,6 +1,6 @@
-# Eyeglass API (LENS Backend)
+# Eyeglass API (NDS Backend)
 
-NestJS backend for the eyeglass / LENS project. REST API for orders, items, pricing, customers, sales, purchases, lab tools, and related resources.
+NestJS backend for the eyeglass / NDS project. REST API for orders, items, pricing, customers, sales, purchases, lab tools, and related resources.
 
 ## Tech stack
 

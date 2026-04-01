@@ -39,7 +39,7 @@ Relevant parts of the body (simplified – see `FRONTEND_EYEGLASS_README.md` for
 
 ```json
 {
-  "series": "ORD-2026-0001",
+  "series": "NDS-2026-0001",
   "customerId": "uuid-of-customer",
   "status": "Pending",
   "orderItems": [
