@@ -16,6 +16,7 @@ import { ItemBase } from 'src/entities/item-base.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolService } from 'src/lab-tool/lab-tool.service';
+import { assertWorkflowOnlyOrderItemPayload } from 'src/order-items/order-item-workflow.guard';
 import {
   isValidDatePreset,
   OrderDatePreset,
@@ -1013,6 +1014,15 @@ export class OrdersService {
         const unitPriceToUse = payloadUnitPrice > 0 ? payloadUnitPrice : (quantity > 0 ? totalAmountToUse / quantity : 0);
 
         if (item.id) {
+          const prevLine = existingOrder.orderItems.find(oi => oi.id === item.id);
+          if (prevLine) {
+            const lineInProduction = ['InProgress', 'Ready'].includes(prevLine.status);
+            const lineApproved = prevLine.approvalStatus === 'Approved';
+            const orderInProduction = ['InProgress', 'Ready'].includes(existingOrder.status);
+            if (lineInProduction || lineApproved || orderInProduction) {
+              assertWorkflowOnlyOrderItemPayload(item as unknown as Record<string, unknown>, prevLine);
+            }
+          }
           // Update existing order item
           await queryRunner.manager.update(OrderItems, item.id, {
             itemId: item.itemId,

@@ -10,6 +10,7 @@ import { OrdersService } from 'src/orders/orders.service';
 import { SalesService } from 'src/sales/sales.service';
 import { CreateSaleDto } from 'src/sales/dto/create-sale.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
+import { assertWorkflowOnlyOrderItemPayload } from './order-item-workflow.guard';
 
 @Injectable()
 export class OrderItemsService {
@@ -200,6 +201,23 @@ export class OrderItemsService {
       if (currentOrderItem.status === 'Delivered') {
         throw new ConflictException(
           'Delivered order items cannot be modified. Create a remake/replacement or a return/adjustment instead.',
+        );
+      }
+
+      const order = await this.orderRepository.findOne({
+        where: { id: currentOrderItem.orderId },
+        select: ['id', 'status'],
+      });
+
+      const lineInProduction = ['InProgress', 'Ready'].includes(currentOrderItem.status);
+      const lineApproved = currentOrderItem.approvalStatus === 'Approved';
+      const orderInProduction =
+        !!order && ['InProgress', 'Ready'].includes(order.status);
+
+      if (lineInProduction || lineApproved || orderInProduction) {
+        assertWorkflowOnlyOrderItemPayload(
+          updateOrderItemDto as Record<string, unknown>,
+          currentOrderItem,
         );
       }
 
