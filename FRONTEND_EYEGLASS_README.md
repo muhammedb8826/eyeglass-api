@@ -512,3 +512,75 @@ Frontend checklist:
 
 - If you receive any of the above, clear local tokens and redirect to login.
 - In admin UI, show a toggle/button for active status and reflect `is_active`.
+
+---
+
+## 9. In-App Notifications
+
+The API supports **in-app notifications** stored in the database and scoped per user (recipient = signed-in user).
+
+All endpoints require:
+
+- `Authorization: Bearer <accessToken>`
+
+### 9.1 List notifications
+
+`GET /api/v1/notifications?page=1&limit=20&status=all`
+
+Query params:
+
+- `page` (default 1)
+- `limit` (default 20, max 100)
+- `status` = `all` | `unread` | `read`
+
+Response `data` shape:
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "recipientId": "uuid",
+      "type": "STORE_REQUEST",
+      "title": "New store request created",
+      "message": "Store request SR-... was created for order ...",
+      "data": { "saleSeries": "SR-...", "orderItemId": "uuid" },
+      "isRead": false,
+      "readAt": null,
+      "createdAt": "2026-04-02T00:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20
+}
+```
+
+### 9.2 Unread count (badge)
+
+`GET /api/v1/notifications/unread-count`
+
+Returns:
+
+```json
+{ "unread": 5 }
+```
+
+### 9.3 Mark one notification as read
+
+`PATCH /api/v1/notifications/:id/read`
+
+### 9.4 Mark all notifications as read
+
+`PATCH /api/v1/notifications/read-all`
+
+### 9.5 Delete a notification
+
+`DELETE /api/v1/notifications/:id`
+
+### 9.6 Notifications emitted by the backend (current)
+
+- **User activation/deactivation**
+  - When an admin activates or deactivates a user, the target user receives a `SECURITY` notification.
+- **Store request created**
+  - When an order item triggers an automatic store request, the assigned `operatorId` receives a `STORE_REQUEST` notification.

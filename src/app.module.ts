@@ -39,6 +39,7 @@ import { LabToolModule } from './lab-tool/lab-tool.module';
 import { BomModule } from './bom/bom.module';
 import { ContactModule } from './contact/contact.module';
 import { AccountModule } from './account/account.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 // Services & Controllers
 import { UserMachineService } from './user-machine/user-machine.service';
@@ -107,6 +108,7 @@ import configuration from './config/configuration';
     PaymentTransactionsModule,
     FixedCostModule,
     NonStockServicesModule,
+    NotificationsModule,
   ],
   providers: [
     // Global Guards

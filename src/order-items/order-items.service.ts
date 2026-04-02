@@ -8,6 +8,7 @@ import { Order } from 'src/entities/order.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
 import { OrdersService } from 'src/orders/orders.service';
 import { SalesService } from 'src/sales/sales.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import { CreateSaleDto } from 'src/sales/dto/create-sale.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
 import { assertWorkflowOnlyOrderItemPayload } from './order-item-workflow.guard';
@@ -24,6 +25,7 @@ export class OrderItemsService {
     private readonly dataSource: DataSource,
     private readonly ordersService: OrdersService,
     private readonly salesService: SalesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createOrderItemDto: CreateOrderItemDto) {
@@ -540,6 +542,16 @@ export class OrderItemsService {
     };
 
     await this.salesService.create(saleDto);
+    // Notify the operator/store user who was assigned to handle the request
+    if (dto.operatorId) {
+      await this.notificationsService.notify({
+        recipientId: dto.operatorId as string,
+        type: 'STORE_REQUEST',
+        title: 'New store request created',
+        message: `Store request ${series} was created for order ${baseSeries}.`,
+        data: { saleSeries: series, orderId: order?.id ?? orderItem.orderId, orderItemId: orderItem.id },
+      });
+    }
   }
 
   private async updateOrderStatus(orderId: string, queryRunner?: any) {

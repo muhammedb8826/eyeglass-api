@@ -6,12 +6,14 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from 'src/entities/user.entity';
 import { Role } from 'src/enums/role.enum';
 import * as bcrypt from 'bcrypt';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
-    private userRepository: Repository<User>
+    private userRepository: Repository<User>,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   async create(createUserDto: CreateUserDto) {
@@ -125,6 +127,15 @@ export class UsersService {
       throw new ForbiddenException('Admin account cannot be activated/deactivated.');
     }
     await this.userRepository.update(id, { is_active: isActive });
+    await this.notificationsService.notify({
+      recipientId: id,
+      type: 'SECURITY',
+      title: isActive ? 'Account activated' : 'Account deactivated',
+      message: isActive
+        ? 'Your account has been activated. You can sign in now.'
+        : 'Your account has been deactivated. Please contact an administrator.',
+      data: { is_active: isActive },
+    });
     return this.userRepository.findOne({ where: { id } });
   }
 
