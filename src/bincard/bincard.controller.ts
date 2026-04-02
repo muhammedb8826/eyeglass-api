@@ -1,7 +1,10 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { BincardService } from './bincard.service';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('bincard')
+@RequirePermissions(Permissions.BINCARD_READ)
 export class BincardController {
   constructor(private readonly bincardService: BincardService) {}
 

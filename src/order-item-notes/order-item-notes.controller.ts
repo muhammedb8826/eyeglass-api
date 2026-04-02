@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { OrderItemNotesService } from './order-item-notes.service';
 import { CreateOrderItemNoteDto } from './dto/create-order-item-note.dto';
 import { UpdateOrderItemNoteDto } from './dto/update-order-item-note.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('order-item-notes')
+@RequirePermissions(Permissions.ORDER_ITEMS_READ)
 export class OrderItemNotesController {
   constructor(private readonly orderItemNotesService: OrderItemNotesService) {}
 
   @Post(':orderItemId')
+  @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
   async createOrderItemNote(
     @Param('orderItemId') orderItemId: string,
     @Body() createOrderItemNoteDto: CreateOrderItemNoteDto,
@@ -31,6 +35,7 @@ export class OrderItemNotesController {
   }
 
   @Delete('note/:id')
+  @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
   remove(@Param('id') id: string) {
     return this.orderItemNotesService.remove(id);
   }

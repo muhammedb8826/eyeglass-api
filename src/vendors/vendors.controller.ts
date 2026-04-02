@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { VendorsService } from './vendors.service';
 import { CreateVendorDto } from './dto/create-vendor.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('vendors')
+@RequirePermissions(Permissions.VENDORS_READ)
 export class VendorsController {
   constructor(private readonly vendorsService: VendorsService) {}
 
   @Post()
+  @RequirePermissions(Permissions.VENDORS_WRITE)
   create(@Body() createVendorDto: CreateVendorDto) {
     return this.vendorsService.create(createVendorDto);
   }
@@ -35,6 +39,7 @@ export class VendorsController {
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.VENDORS_WRITE)
   remove(@Param('id') id: string) {
     return this.vendorsService.remove(id);
   }

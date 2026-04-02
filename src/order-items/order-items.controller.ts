@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { OrderItemsService } from './order-items.service';
 import { CreateOrderItemDto } from './dto/create-order-item.dto';
 import { UpdateOrderItemDto } from './dto/update-order-item.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('order-items')
+@RequirePermissions(Permissions.ORDER_ITEMS_READ)
 export class OrderItemsController {
   constructor(private readonly orderItemsService: OrderItemsService) {}
 
   @Post()
+  @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
   async create(@Body() createOrderItemDto: CreateOrderItemDto) {
     return this.orderItemsService.create(createOrderItemDto);
   }
@@ -33,11 +37,13 @@ export class OrderItemsController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
   async update(@Param('id') id: string, @Body() updateOrderItemDto: UpdateOrderItemDto) {
     return this.orderItemsService.update(id, updateOrderItemDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
   async remove(@Param('id') id: string) {
     return this.orderItemsService.remove(id);
   }

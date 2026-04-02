@@ -454,7 +454,9 @@ Expect and handle these as validation/business errors:
 This backend uses:
 
 - **JWT auth** for all endpoints (unless explicitly marked public).
-- **RBAC** via `roles` on the user and server-side role guard.
+- **RBAC** via `roles` on the user.
+- **Permissions** (industry-style `resource.action` codes) assigned **per role** in the database.
+- **ADMIN** is a superuser: effective **full access** to all permissions (not stored row-by-row).
 
 ### 8.1 Roles
 
@@ -469,22 +471,85 @@ Users have a single `roles` value (enum), for example:
 - `PURCHASER`
 - `USER`
 
-Frontend can read it from the signed-in user object and use it to show/hide menus, but backend enforces it.
+Use `roles` for coarse UI grouping; use **permissions** (below) for accurate menu/route guards.
 
-### 8.2 Admin-only user management
+### 8.2 Server-side enforcement
 
-All `/api/v1/users/*` endpoints require:
+The API applies a **global permission guard** after JWT authentication:
 
-- `Authorization: Bearer <accessToken>`
-- User must have `roles = "ADMIN"`
+- For most routes, an authenticated user must hold the permission(s) declared on that route (via `@RequirePermissions` in the backend). If they do not, the response is **403** with `Missing permission: <code>`.
+- Some routes are **public** (no JWT): e.g. `POST /signin`, `POST /signup`, `POST /refresh`, `POST /contact`, and **read-only** `GET /pricing` listings (and similar explicitly marked handlers).
+- Some routes require a valid JWT but **do not** check the permission matrix (intentional “any signed-in user”): e.g. **`GET /permissions`**, **`GET /permissions/me`**, **`/account/*`**, **`/notifications/*`**, and **auth** helpers like **`POST /logout`**. The frontend should still use `permissions/me` to hide UI; the API only skips the matrix on these paths.
 
-If a non-admin calls these endpoints, expect HTTP 403/401.
+If a route is authenticated but the backend forgot to declare a permission (and it is not public/skip), the API responds with **403** and a message that the route must be assigned permissions or marked public/skip — that indicates a server configuration bug, not a missing role grant.
 
-### 8.3 Activate / deactivate user accounts
+### 8.3 Permission codes (`resource.action`)
+
+Codes used by the API (non-exhaustive; `GET /permissions` returns the full catalog):
+
+- `users.manage` — user CRUD, activate/deactivate, reset password
+- `permissions.manage` — view/edit which permissions each role has (`/permissions/matrix`, `PUT /permissions/roles/...`, etc.)
+- `orders.read` / `orders.write`
+- `order_items.read` / `order_items.write`
+- `customers.read` / `customers.write`
+- `items.read` / `items.write`
+- `purchases.read` / `purchases.write`
+- `sales.read` / `sales.write`
+- `bincard.read`
+- `pricing.read` / `pricing.write` (mutations use `pricing.write`; some pricing **GET** routes are public — see API)
+- `vendors.read` / `vendors.write`
+- `master.read` / `master.write` — shared master data (machines, services, UOM, unit categories, sales partners, non-stock services, user–machine assignments)
+- `bom.read` / `bom.write`
+- `lab_tool.read` / `lab_tool.write`
+- `finance.read` / `finance.write` — discounts, commissions, commission transactions, payment terms, payment transactions, fixed costs
+- `stock_ops.read` / `stock_ops.write` — operator stock
+- `file.write` — `POST /file/upload`
+
+On first database bootstrap, the server seeds the **permission catalog** and a **default role → permission matrix** (you can change non-`ADMIN` roles later via API). **Existing databases** do not automatically re-sync when defaults change in code; adjust roles with **`PUT /permissions/roles/:role`** (or migrate) if you need new codes on a role.
+
+### 8.4 APIs for the frontend
+
+- **Current user’s effective permissions** (recommended for menus):
+
+  `GET /api/v1/permissions/me`
+
+  Response shape:
+
+  ```json
+  { "role": "LAB_TECHNICIAN", "permissions": ["items.read", "orders.read", ...] }
+  ```
+
+- **Full catalog** (labels / admin UI):
+
+  `GET /api/v1/permissions`
+
+- **Full matrix** (admin):
+
+  `GET /api/v1/permissions/matrix`  
+  Requires `permissions.manage` (or `ADMIN`).
+
+- **Replace permissions for one role** (admin):
+
+  `PUT /api/v1/permissions/roles/:role`  
+  Body: `{ "codes": ["orders.read", "orders.write"] }`  
+  Use `{ "codes": [] }` to **clear** all permissions for that role (non-`ADMIN` only).  
+  Requires `permissions.manage` (or `ADMIN`).  
+  **Note:** You cannot assign explicit permissions to `ADMIN`; `ADMIN` always has full access.
+
+If the user lacks a required permission, protected endpoints respond with **403** and a message like `Missing permission: users.manage`.
+
+### 8.5 User management (`users.manage`)
+
+All `/api/v1/users/*` endpoints require the **`users.manage`** permission.
+
+- Users with role **`ADMIN`** always satisfy this (superuser).
+- Other roles only if an admin has granted `users.manage` to that role via `PUT /permissions/roles/...` (unusual).
+
+### 8.6 Activate / deactivate user accounts
 
 Industry-standard behavior: deactivated users cannot sign in or access protected APIs.
 
-Endpoints (admin only):
+Endpoints (require `users.manage` or `ADMIN`):
 
 - **Activate**
   - `PATCH /api/v1/users/:id/activate`
@@ -499,10 +564,10 @@ Example deactivate request:
 
 ```http
 PATCH /api/v1/users/USER_UUID/deactivate
-Authorization: Bearer <adminAccessToken>
+Authorization: Bearer <accessToken>
 ```
 
-### 8.4 What happens when a user is deactivated
+### 8.7 What happens when a user is deactivated
 
 - `POST /api/v1/signin` fails with: `Account is deactivated`
 - `POST /api/v1/refresh` fails with: `Account is deactivated`
@@ -522,6 +587,8 @@ The API supports **in-app notifications** stored in the database and scoped per 
 All endpoints require:
 
 - `Authorization: Bearer <accessToken>`
+
+They do **not** require a specific permission code beyond being signed in (same pattern as `/account`).
 
 ### 9.1 List notifications
 

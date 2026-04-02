@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { MachinesService } from './machines.service';
 import { CreateMachineDto } from './dto/create-machine.dto';
 import { UpdateMachineDto } from './dto/update-machine.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('machines')
+@RequirePermissions(Permissions.MASTER_READ)
 export class MachinesController {
   constructor(private readonly machinesService: MachinesService) {}
 
   @Post()
+  @RequirePermissions(Permissions.MASTER_WRITE)
   create(@Body() createMachineDto: CreateMachineDto) {
     return this.machinesService.create(createMachineDto);
   }
@@ -30,11 +34,13 @@ export class MachinesController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.MASTER_WRITE)
   update(@Param('id') id: string, @Body() updateMachineDto: UpdateMachineDto) {
     return this.machinesService.update(id, updateMachineDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.MASTER_WRITE)
   remove(@Param('id') id: string) {
     return this.machinesService.remove(id);
   }

@@ -2,10 +2,13 @@ import { BadRequestException, Body, Controller, Post, UploadedFile, UseIntercept
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('file')
 export class FileController {
     @Post('upload')
+    @RequirePermissions(Permissions.FILE_WRITE)
     @UseInterceptors(FileInterceptor('file', { // 'file' should match the name attribute in the form
         storage: diskStorage({
             destination: './uploads',

@@ -3,8 +3,11 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { Public } from '../decorators/public.decorator';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('orders')
+@RequirePermissions(Permissions.ORDERS_READ)
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) { }
 
@@ -84,11 +87,13 @@ export class OrdersController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.ORDERS_WRITE)
   async update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
     return this.ordersService.update(id, updateOrderDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.ORDERS_WRITE)
   async remove(@Param('id') id: string) {
     return this.ordersService.remove(id);
   }

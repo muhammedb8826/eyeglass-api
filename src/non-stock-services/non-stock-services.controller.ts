@@ -2,14 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { NonStockServicesService } from './non-stock-services.service';
 import { CreateNonStockServiceDto } from './dto/create-non-stock-service.dto';
 import { UpdateNonStockServiceDto } from './dto/update-non-stock-service.dto';
-import { Public } from '../decorators';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('non-stock-services')
+@RequirePermissions(Permissions.MASTER_READ)
 export class NonStockServicesController {
   constructor(private readonly nonStockServicesService: NonStockServicesService) {}
 
-  @Public()
   @Post()
+  @RequirePermissions(Permissions.MASTER_WRITE)
   create(@Body() createNonStockServiceDto: CreateNonStockServiceDto) {
     return this.nonStockServicesService.create(createNonStockServiceDto);
   }
@@ -21,25 +23,24 @@ export class NonStockServicesController {
     return this.nonStockServicesService.findAll(skip, take);
   }
 
-  @Public()
   @Get('all')
   findAllNonStockServices() {
     return this.nonStockServicesService.findAllNonStockServices();
   }
 
-  @Public()
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.nonStockServicesService.findOne(id);
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.MASTER_WRITE)
   update(@Param('id') id: string, @Body() updateNonStockServiceDto: UpdateNonStockServiceDto) {
     return this.nonStockServicesService.update(id, updateNonStockServiceDto);
   }
 
-  @Public()
   @Delete(':id')
+  @RequirePermissions(Permissions.MASTER_WRITE)
   remove(@Param('id') id: string) {
     return this.nonStockServicesService.remove(id);
   }

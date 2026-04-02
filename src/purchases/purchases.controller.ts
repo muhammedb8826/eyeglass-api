@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { PurchasesService } from './purchases.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('purchases')
+@RequirePermissions(Permissions.PURCHASES_READ)
 export class PurchasesController {
   constructor(private readonly purchasesService: PurchasesService) {}
 
   @Post()
+  @RequirePermissions(Permissions.PURCHASES_WRITE)
   create(@Body() createPurchaseDto: CreatePurchaseDto) {
     return this.purchasesService.create(createPurchaseDto);
   }
@@ -39,11 +43,13 @@ export class PurchasesController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.PURCHASES_WRITE)
   update(@Param('id') id: string, @Body() updatePurchaseDto: UpdatePurchaseDto) {
     return this.purchasesService.update(id, updatePurchaseDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.PURCHASES_WRITE)
   remove(@Param('id') id: string) {
     return this.purchasesService.remove(id);
   }

@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { DiscountsService } from './discounts.service';
 import { CreateDiscountDto } from './dto/create-discount.dto';
 import { UpdateDiscountDto } from './dto/update-discount.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('discounts')
+@RequirePermissions(Permissions.FINANCE_READ)
 export class DiscountsController {
   constructor(private readonly discountsService: DiscountsService) {}
 
   @Post()
+  @RequirePermissions(Permissions.FINANCE_WRITE)
   async create(@Body() createDiscountDto: CreateDiscountDto) {
     return this.discountsService.create(createDiscountDto);
   }
@@ -30,11 +34,13 @@ export class DiscountsController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.FINANCE_WRITE)
   async update(@Param('id') id: string, @Body() updateDiscountDto: UpdateDiscountDto) {
     return this.discountsService.update(id, updateDiscountDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.FINANCE_WRITE)
   async remove(@Param('id') id: string) {
     return this.discountsService.remove(id);
   }

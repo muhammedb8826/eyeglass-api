@@ -83,6 +83,8 @@ Send `quantityRight` and/or `quantityLeft` in create/update payloads when you wa
 
 Roles: `USER`, `ADMIN`, `RECEPTION`, `LAB_TECHNICIAN`, `OPERATOR`, `FINANCE`, `DISPENSER`, `PURCHASER`. See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md#user-roles-eyeglass-lens-lab-standard).
 
+**Permissions (RBAC):** Most authenticated routes require permission codes (`resource.action`). See [FRONTEND_EYEGLASS_README.md §8](FRONTEND_EYEGLASS_README.md#8-rbac-roles--user-activationdeactivation) for enforcement behavior, the full code list, and `GET /permissions/me`.
+
 ## Order item statuses (eyeglass manufacturing)
 
 Order items use: **Pending** → **InProgress** → **Ready** → **Delivered** (or **Cancelled**). **InProgress** and **Cancelled** consume operator stock. Order status is derived from its items. See [ORDER_TO_PRODUCTION_FLOW.md](ORDER_TO_PRODUCTION_FLOW.md).
@@ -108,7 +110,7 @@ Each item also has:
 
 ## API and documentation
 
-- **Frontend integration:** See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md) for base URL, auth, and endpoint usage.
+- **Frontend integration:** See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md) for base URL, auth, and endpoint usage. For RBAC and which endpoints require which permission, see [FRONTEND_EYEGLASS_README.md](FRONTEND_EYEGLASS_README.md) (especially §8).
 - **Eyeglass backend (developer guide):** See [EYEGLASS_BACKEND_DEVELOPER_GUIDE.md](EYEGLASS_BACKEND_DEVELOPER_GUIDE.md) for prescription model, quantity per eye, lens items/bases, lab tools, and producibility checks.
 - **Response types:** See [RESPONSE_TYPES_SUMMARY.md](RESPONSE_TYPES_SUMMARY.md) if present.
 

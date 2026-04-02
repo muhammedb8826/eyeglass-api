@@ -3,7 +3,6 @@ import {
   Get,
   Patch,
   Body,
-  UseGuards,
   HttpCode,
   HttpStatus,
   UseInterceptors,
@@ -16,11 +15,11 @@ import { extname } from 'path';
 import { AccountService } from './account.service';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { AtGuard } from '../common';
 import { GetCurrentUserId } from '../decorators';
+import { SkipPermissions } from '../decorators/skip-permissions.decorator';
 
 @Controller('account')
-@UseGuards(AtGuard)
+@SkipPermissions()
 export class AccountController {
   constructor(private readonly accountService: AccountService) {}
 

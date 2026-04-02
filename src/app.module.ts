@@ -6,6 +6,7 @@ import * as entities from './entities';
 
 // Guards
 import { AtGuard } from './common';
+import { PermissionsGuard } from './permissions/permissions.guard';
 
 // Modules
 import { AuthModule } from './auth/auth.module';
@@ -40,6 +41,7 @@ import { BomModule } from './bom/bom.module';
 import { ContactModule } from './contact/contact.module';
 import { AccountModule } from './account/account.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PermissionsModule } from './permissions/permissions.module';
 
 // Services & Controllers
 import { UserMachineService } from './user-machine/user-machine.service';
@@ -77,6 +79,7 @@ import configuration from './config/configuration';
     // Feature Modules (alphabetical order)
     AccountModule,
     AuthModule,
+    PermissionsModule,
     ContactModule,
     CustomersModule,
     CommissionsModule,
@@ -116,7 +119,11 @@ import configuration from './config/configuration';
       provide: APP_GUARD,
       useClass: AtGuard,
     },
-    
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+    },
+
     // Shared Services
     UserMachineService,
     UsersService,

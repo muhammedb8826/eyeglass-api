@@ -11,12 +11,16 @@ import {
 import { LabToolService } from './lab-tool.service';
 import { CreateLabToolDto } from './dto/create-lab-tool.dto';
 import { UpdateLabToolDto } from './dto/update-lab-tool.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('lab-tools')
+@RequirePermissions(Permissions.LAB_TOOL_READ)
 export class LabToolController {
   constructor(private readonly labToolService: LabToolService) {}
 
   @Post()
+  @RequirePermissions(Permissions.LAB_TOOL_WRITE)
   create(@Body() createLabToolDto: CreateLabToolDto) {
     return this.labToolService.create(createLabToolDto);
   }
@@ -46,11 +50,13 @@ export class LabToolController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.LAB_TOOL_WRITE)
   update(@Param('id') id: string, @Body() updateLabToolDto: UpdateLabToolDto) {
     return this.labToolService.update(id, updateLabToolDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.LAB_TOOL_WRITE)
   remove(@Param('id') id: string) {
     return this.labToolService.remove(id);
   }

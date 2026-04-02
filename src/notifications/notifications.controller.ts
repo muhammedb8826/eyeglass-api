@@ -1,10 +1,12 @@
 import { Controller, Delete, Get, Param, Patch, Query } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { GetCurrentUserId } from 'src/decorators';
+import { SkipPermissions } from 'src/decorators/skip-permissions.decorator';
 import { ListNotificationsDto } from './dto/list-notifications.dto';
 import { ResponseBuilder } from 'src/common/response.types';
 
 @Controller('notifications')
+@SkipPermissions()
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 

@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { OperatorStockService } from './operator-stock.service';
 import { CreateOperatorStockDto } from './dto/create-operator-stock.dto';
 import { UpdateOperatorStockDto } from './dto/update-operator-stock.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('operator-stocks')
+@RequirePermissions(Permissions.STOCK_OPS_READ)
 export class OperatorStockController {
   constructor(private readonly operatorStockService: OperatorStockService) {}
 
   @Post()
+  @RequirePermissions(Permissions.STOCK_OPS_WRITE)
   create(@Body() createOperatorStockDto: CreateOperatorStockDto) {
     return this.operatorStockService.create(createOperatorStockDto);
   }
@@ -25,11 +29,13 @@ export class OperatorStockController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.STOCK_OPS_WRITE)
   update(@Param('id') id: string, @Body() updateOperatorStockDto: UpdateOperatorStockDto) {
     return this.operatorStockService.update(id, updateOperatorStockDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.STOCK_OPS_WRITE)
   remove(@Param('id') id: string) {
     return this.operatorStockService.remove(id);
   }

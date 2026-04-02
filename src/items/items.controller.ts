@@ -4,12 +4,16 @@ import { CreateItemDto } from './dto/create-item.dto';
 import { CreateItemBaseDto } from './dto/create-item-base.dto';
 import { UpdateItemBaseDto } from './dto/update-item-base.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('items')
+@RequirePermissions(Permissions.ITEMS_READ)
 export class ItemsController {
   constructor(private readonly itemsService: ItemsService) {}
 
   @Post()
+  @RequirePermissions(Permissions.ITEMS_WRITE)
   create(@Body() createItemDto: CreateItemDto) {
     return this.itemsService.create(createItemDto);
   }
@@ -32,11 +36,13 @@ export class ItemsController {
   }
 
   @Post(':id/bases')
+  @RequirePermissions(Permissions.ITEMS_WRITE)
   addBase(@Param('id') id: string, @Body() createItemBaseDto: CreateItemBaseDto) {
     return this.itemsService.addBase(id, createItemBaseDto);
   }
 
   @Patch(':id/bases/:baseId')
+  @RequirePermissions(Permissions.ITEMS_WRITE)
   updateBase(
     @Param('id') id: string,
     @Param('baseId') baseId: string,
@@ -46,6 +52,7 @@ export class ItemsController {
   }
 
   @Delete(':id/bases/:baseId')
+  @RequirePermissions(Permissions.ITEMS_WRITE)
   removeBase(@Param('id') id: string, @Param('baseId') baseId: string) {
     return this.itemsService.deleteBase(id, baseId);
   }
@@ -62,11 +69,13 @@ export class ItemsController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permissions.ITEMS_WRITE)
   update(@Param('id') id: string, @Body() updateItemDto: UpdateItemDto) {
     return this.itemsService.update(id, updateItemDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.ITEMS_WRITE)
   remove(@Param('id') id: string) {
     return this.itemsService.remove(id);
   }

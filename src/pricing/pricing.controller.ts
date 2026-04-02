@@ -3,12 +3,15 @@ import { PricingService } from './pricing.service';
 import { CreatePricingDto } from './dto/create-pricing.dto';
 import { UpdatePricingDto } from './dto/update-pricing.dto';
 import { Public } from '../decorators/public.decorator';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('pricing')
 export class PricingController {
   constructor(private readonly pricingService: PricingService) {}
 
   @Post()
+  @RequirePermissions(Permissions.PRICING_WRITE)
   create(@Body() createPricingDto: CreatePricingDto) {
     console.log(createPricingDto)
     return this.pricingService.create(createPricingDto);
@@ -34,13 +37,14 @@ export class PricingController {
     return this.pricingService.findOne(id);
   }
 
-  @Public()
   @Patch(':id')
+  @RequirePermissions(Permissions.PRICING_WRITE)
   update(@Param('id') id: string, @Body() updatePricingDto: UpdatePricingDto) {
     return this.pricingService.update(id, updatePricingDto);
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.PRICING_WRITE)
   remove(@Param('id') id: string) {
     return this.pricingService.remove(id);
   }

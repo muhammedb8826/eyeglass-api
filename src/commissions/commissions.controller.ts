@@ -2,12 +2,16 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { CommissionsService } from './commissions.service';
 import { CreateCommissionDto } from './dto/create-commission.dto';
 import { UpdateCommissionDto } from './dto/update-commission.dto';
+import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import { Permissions } from 'src/permissions/permission.constants';
 
 @Controller('commissions')
+@RequirePermissions(Permissions.FINANCE_READ)
 export class CommissionsController {
   constructor(private readonly commissionsService: CommissionsService) {}
 
   @Post()
+  @RequirePermissions(Permissions.FINANCE_WRITE)
   create(@Body() createCommissionDto: CreateCommissionDto) {
     return this.commissionsService.create(createCommissionDto);
   }
@@ -35,6 +39,7 @@ export class CommissionsController {
   }
 
   @Delete(':id')
+  @RequirePermissions(Permissions.FINANCE_WRITE)
   remove(@Param('id') id: string) {
     return this.commissionsService.remove(id);
   }

@@ -1,4 +1,5 @@
 import { Public } from './../decorators/public.decorator';
+import { SkipPermissions } from 'src/decorators/skip-permissions.decorator';
 import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthDto } from './dto';
@@ -7,6 +8,7 @@ import { AtGuard, RtGuard } from 'src/common';
 import { GetCurrentUser, GetCurrentUserId } from 'src/decorators';
 
 @Controller()
+@SkipPermissions()
 export class AuthController {
     constructor(private authService: AuthService) {}
     
