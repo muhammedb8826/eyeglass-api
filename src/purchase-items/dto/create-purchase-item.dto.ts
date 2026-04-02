@@ -1,8 +1,12 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString} from "class-validator";
+import { IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID} from "class-validator";
 
 export class CreatePurchaseItemDto {
     id: string;
     itemId: string;
+
+    @IsOptional()
+    @IsUUID()
+    itemBaseId?: string;
 
     purchaseId: string;
 

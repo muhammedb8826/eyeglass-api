@@ -139,8 +139,18 @@ export class ItemsService {
       itemId,
       baseCode: dto.baseCode.trim(),
       addPower: dto.addPower,
+      quantity: dto.quantity ?? 0,
     });
-    return this.itemBaseRepository.save(base);
+    const saved = await this.itemBaseRepository.save(base);
+    await this.syncParentQuantityFromBases(itemId);
+    return saved;
+  }
+
+  private async syncParentQuantityFromBases(itemId: string): Promise<void> {
+    const bases = await this.itemBaseRepository.find({ where: { itemId } });
+    if (bases.length === 0) return;
+    const total = bases.reduce((sum, b) => sum + Number(b.quantity ?? 0), 0);
+    await this.itemRepository.update(itemId, { quantity: total });
   }
 
   /** Get bases for an item (e.g. 3221 → 350^+2.5, 575^+2.5). Returns empty array if item has no bases. */
@@ -167,6 +177,9 @@ export class ItemsService {
     if (dto.addPower !== undefined) {
       base.addPower = dto.addPower;
     }
+    if (dto.quantity !== undefined) {
+      base.quantity = dto.quantity;
+    }
     const existing = await this.itemBaseRepository.findOne({
       where: { itemId, baseCode: base.baseCode, addPower: base.addPower },
     });
@@ -175,7 +188,9 @@ export class ItemsService {
         `This item already has a base with baseCode "${base.baseCode}" and addPower ${base.addPower}`,
       );
     }
-    return this.itemBaseRepository.save(base);
+    const saved = await this.itemBaseRepository.save(base);
+    await this.syncParentQuantityFromBases(itemId);
+    return saved;
   }
 
   /** Delete a base variant from an item. Fails if pricing or order items reference this base (DB constraint). */
@@ -184,7 +199,13 @@ export class ItemsService {
     if (!base) {
       throw new NotFoundException(`Base with ID ${baseId} for this item not found`);
     }
+    if (Number(base.quantity ?? 0) > 0) {
+      throw new BadRequestException(
+        'Cannot delete a variant that still has on-hand quantity; adjust stock to zero first.',
+      );
+    }
     await this.itemBaseRepository.delete(baseId);
+    await this.syncParentQuantityFromBases(itemId);
   }
 
   /**
@@ -219,6 +240,15 @@ export class ItemsService {
       throw new NotFoundException(`Item with ID ${id} not found`);
     }
   
+    if (updateItemDto.quantity !== undefined) {
+      const variantCount = await this.itemBaseRepository.count({ where: { itemId: id } });
+      if (variantCount > 0) {
+        throw new BadRequestException(
+          'This item uses base/ADD variants; set quantity per variant (item base) or use purchases/sales, not parent quantity.',
+        );
+      }
+    }
+
     const updateData: any = {
       name: updateItemDto.name,
       description: updateItemDto.description,

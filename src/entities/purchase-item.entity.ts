@@ -1,12 +1,12 @@
-import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, Unique, BeforeInsert, PrimaryColumn } from 'typeorm';
+import { Entity, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany, BeforeInsert, PrimaryColumn } from 'typeorm';
 import { Item } from './item.entity';
 import { Purchase } from './purchase.entity';
 import { UOM } from './uom.entity';
 import { PurchaseItemNote } from './purchase-item-note.entity';
 import { randomUUID } from 'crypto';
+import { ItemBase } from './item-base.entity';
 
 @Entity('purchase_items')
-@Unique(['purchaseId', 'itemId'])
 export class PurchaseItems {
   @PrimaryColumn('uuid')
   id: string;
@@ -23,6 +23,9 @@ export class PurchaseItems {
 
   @Column()
   itemId: string;
+
+  @Column({ nullable: true })
+  itemBaseId: string;
 
   @Column()
   quantity: number;
@@ -60,6 +63,10 @@ export class PurchaseItems {
   @ManyToOne(() => Item, item => item.purchases)
   @JoinColumn({ name: 'itemId' })
   item: Item;
+
+  @ManyToOne(() => ItemBase, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'itemBaseId' })
+  itemBase: ItemBase;
 
   @ManyToOne(() => Purchase, purchase => purchase.purchaseItems)
   @JoinColumn({ name: 'purchaseId' })

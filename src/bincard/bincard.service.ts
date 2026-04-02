@@ -5,6 +5,8 @@ import { Bincard, BincardMovementType, BincardReferenceType } from 'src/entities
 
 export interface RecordBincardMovementDto {
   itemId: string;
+  /** When set, movement is for this base/ADD variant (balanceAfter matches variant qty). */
+  itemBaseId?: string | null;
   movementType: BincardMovementType;
   quantity: number;
   balanceAfter: number;
@@ -24,6 +26,7 @@ export class BincardService {
   async recordMovement(dto: RecordBincardMovementDto): Promise<Bincard> {
     const entry = this.bincardRepository.create({
       itemId: dto.itemId,
+      itemBaseId: dto.itemBaseId ?? null,
       movementType: dto.movementType,
       quantity: dto.quantity,
       balanceAfter: dto.balanceAfter,

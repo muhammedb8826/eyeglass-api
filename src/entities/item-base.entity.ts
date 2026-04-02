@@ -35,6 +35,10 @@ export class ItemBase {
   @Column('float')
   addPower: number;
 
+  /** On-hand quantity for this material + base + ADD variant (industry-standard lens stock). */
+  @Column('float', { default: 0 })
+  quantity: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

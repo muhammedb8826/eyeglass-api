@@ -1,8 +1,13 @@
-import {IsNotEmpty, IsNumber, IsOptional, IsString } from "class-validator";
+import {IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID } from "class-validator";
 
 export class CreateSaleItemDto {
     id: string;
     itemId: string;
+
+    /** Required when the item has base/ADD variants (lens stock per variant). */
+    @IsOptional()
+    @IsUUID()
+    itemBaseId?: string;
 
     saleId: string;
     uomId: string;

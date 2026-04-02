@@ -332,3 +332,117 @@ Recommended rollout:
 2. Add them to **create/edit** forms in the frontend.
 3. Add frontend‑side validation (e.g. SPH range, AX 0–180, etc.) once the workflows are stable.
 
+---
+
+## 7. Variant Inventory (Important Frontend Update)
+
+Stock is now tracked using an **industry-standard lens model**:
+
+- If an item has `itemBases[]`, stock is managed **per variant** (`itemBaseId`), not only at parent item level.
+- `ItemBase.quantity` is the source of truth for lens stock.
+- Parent `Item.quantity` is maintained by backend as a sum/aggregate for convenience.
+
+### 7.1 How frontend should decide `itemBaseId`
+
+For any line that moves stock (store request issue/sale, purchase receipt):
+
+1. Load item details (`GET /api/v1/items/:id` or `GET /api/v1/items/:id/bases`).
+2. If `itemBases.length > 0`, **require user to pick a base variant** and send `itemBaseId`.
+3. If `itemBases.length === 0`, **do not send `itemBaseId`**.
+
+Backend validation now enforces this strictly.
+
+### 7.2 Sales / Store Request payload requirement
+
+When creating/updating sales (`POST/PATCH /api/v1/sales`) and sale items:
+
+- For variant-tracked item: `saleItems[].itemBaseId` is required.
+- For non-variant item: `saleItems[].itemBaseId` must be omitted or null.
+
+Example sale line for a variant-tracked lens:
+
+```json
+{
+  "itemId": "uuid-material-3221",
+  "itemBaseId": "uuid-base-350-add-25",
+  "uomId": "uuid-uom",
+  "baseUomId": "uuid-base-uom",
+  "quantity": 2,
+  "unit": 2,
+  "status": "Requested"
+}
+```
+
+Status behavior for inventory movement:
+
+- `Requested`: availability is checked against the selected variant.
+- Transition to `Stocked-out`: stock is reduced (OUT movement).
+- Transition from `Stocked-out` to another status (or deleting a stocked-out line): stock is returned (IN movement).
+
+### 7.3 Purchases payload requirement
+
+When creating/updating purchase items:
+
+- For variant-tracked item: `itemBaseId` is required.
+- For non-variant item: `itemBaseId` must be omitted/null.
+
+Example purchase item line:
+
+```json
+{
+  "purchaseId": "uuid-purchase",
+  "itemId": "uuid-material-3221",
+  "itemBaseId": "uuid-base-575-add-25",
+  "uomId": "uuid-uom",
+  "baseUomId": "uuid-base-uom",
+  "quantity": 50,
+  "unit": 50,
+  "unitPrice": 120,
+  "amount": 6000,
+  "status": "Pending"
+}
+```
+
+Status behavior for inventory movement:
+
+- Transition to `Received`: stock is increased (IN movement).
+- Transition from `Received` to another status (or deleting a received line): stock is reversed (OUT movement).
+
+### 7.4 Bincard behavior
+
+Bincard entries now optionally include `itemBaseId`:
+
+- If `itemBaseId` is set, `balanceAfter` represents that variant balance.
+- If `itemBaseId` is null, `balanceAfter` represents parent item balance (legacy/non-variant).
+
+Frontend recommendation:
+
+- In stock history screens, display both:
+  - material (`itemId` / item name)
+  - variant (from `itemBaseId` -> `baseCode` + `addPower`) when available
+
+### 7.5 Store request from order item
+
+Automatic store requests created from order items now propagate `orderItem.itemBaseId` (for non-BOM material requests).  
+This means lab/store flows should preserve correct variant tracking without extra manual correction.
+
+### 7.6 Error messages you may receive
+
+Expect and handle these as validation/business errors:
+
+- `itemBaseId is required for "<item>" because stock is tracked per base/ADD variant.`
+- `This item does not use base/ADD variants; omit itemBaseId...`
+- `itemBaseId does not belong to this item or was not found.`
+- `Requested quantity exceeds available stock for this variant...`
+- `Insufficient stock at this base/ADD variant.`
+
+### 7.7 UI checklist for rollout
+
+- Add variant selector (`itemBaseId`) in:
+  - order item forms (already recommended in section 4/5),
+  - sale/store request item forms,
+  - purchase item forms.
+- Make selector conditionally required only when item has bases.
+- Show variant stock (`ItemBase.quantity`) in dropdown options to prevent wrong picks.
+- For existing historical rows where `itemBaseId` is missing on variant items, show a warning badge and prevent issuing/receiving until corrected.
+

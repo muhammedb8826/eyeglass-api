@@ -1,4 +1,4 @@
-import { IsNumber, IsString, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateItemBaseDto {
   /** Base code from supplier (e.g. 350, 575, 400, 600, 800, 1000). Notation: 350+25 → baseCode "350", addPower 2.5 */
@@ -9,4 +9,10 @@ export class CreateItemBaseDto {
   @IsNumber()
   @Min(0)
   addPower: number;
+
+  /** Initial on-hand for this variant (default 0). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  quantity?: number;
 }

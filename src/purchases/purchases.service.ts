@@ -47,6 +47,7 @@ export class PurchasesService {
         this.purchaseItemRepository.create({
           purchaseId: savedPurchase.id,
           itemId: item.itemId,
+          itemBaseId: item.itemBaseId ?? null,
           uomId: item.uomId,
           baseUomId: item.baseUomId,
           unit: parseFloat(item.unit.toString()),
@@ -80,6 +81,7 @@ export class PurchasesService {
       .leftJoinAndSelect('purchase.purchaser', 'purchaser')
       .leftJoinAndSelect('purchase.purchaseItems', 'purchaseItems')
       .leftJoinAndSelect('purchaseItems.item', 'item')
+      .leftJoinAndSelect('purchaseItems.itemBase', 'itemBase')
       .orderBy('purchase.createdAt', 'DESC')
       .skip(Number(skip))
       .take(Number(take));
@@ -142,9 +144,10 @@ export class PurchasesService {
     const purchase = await this.purchaseRepository.findOne({
       where: { id },
       relations: {
-        purchaseItems: true,
         vendor: true,
         purchaser: true,
+        // ensure FE receives base/add info when present
+        purchaseItems: { itemBase: true },
       },
     });
 
@@ -195,6 +198,7 @@ export class PurchasesService {
           // Update existing item
           await this.purchaseItemRepository.update(item.id, {
             quantity: item.quantity,
+            itemBaseId: item.itemBaseId ?? null,
             uomId: item.uomId,
             baseUomId: item.baseUomId,
             unit: parseFloat(item.unit.toString()),
@@ -208,6 +212,7 @@ export class PurchasesService {
           const newItem = this.purchaseItemRepository.create({
             purchaseId: id,
             itemId: item.itemId,
+            itemBaseId: item.itemBaseId ?? null,
             uomId: item.uomId,
             baseUomId: item.baseUomId,
             unit: parseFloat(item.unit.toString()),

@@ -4,24 +4,65 @@ import { Repository } from 'typeorm';
 import { CreatePurchaseItemDto } from './dto/create-purchase-item.dto';
 import { UpdatePurchaseItemDto } from './dto/update-purchase-item.dto';
 import { PurchaseItems } from 'src/entities/purchase-item.entity';
-import { Item } from 'src/entities/item.entity';
 import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
+import {
+  applyInventoryDelta,
+  assertItemVariantLineFields,
+} from 'src/inventory/item-inventory.util';
 
 @Injectable()
 export class PurchaseItemsService {
   constructor(
     @InjectRepository(PurchaseItems)
     private purchaseItemRepository: Repository<PurchaseItems>,
-    @InjectRepository(Item)
-    private itemRepository: Repository<Item>,
     private readonly bincardService: BincardService,
   ) {}
 
+  private async findDuplicateLine(
+    purchaseId: string,
+    itemId: string,
+    itemBaseId: string | null,
+    excludeId?: string,
+  ): Promise<PurchaseItems | null> {
+    const qb = this.purchaseItemRepository
+      .createQueryBuilder('pi')
+      .where('pi.purchaseId = :purchaseId', { purchaseId })
+      .andWhere('pi.itemId = :itemId', { itemId });
+    if (itemBaseId) {
+      qb.andWhere('pi.itemBaseId = :itemBaseId', { itemBaseId });
+    } else {
+      qb.andWhere('pi.itemBaseId IS NULL');
+    }
+    if (excludeId) {
+      qb.andWhere('pi.id != :excludeId', { excludeId });
+    }
+    return qb.getOne();
+  }
+
   async create(createPurchaseItemDto: CreatePurchaseItemDto) {
     try {
+      const itemBaseId = createPurchaseItemDto.itemBaseId ?? null;
+      await assertItemVariantLineFields(
+        this.purchaseItemRepository.manager,
+        createPurchaseItemDto.itemId,
+        itemBaseId,
+      );
+
+      const dup = await this.findDuplicateLine(
+        createPurchaseItemDto.purchaseId,
+        createPurchaseItemDto.itemId,
+        itemBaseId,
+      );
+      if (dup) {
+        throw new ConflictException(
+          'Duplicate purchase line for this item and variant on the same purchase.',
+        );
+      }
+
       const purchaseItem = this.purchaseItemRepository.create({
         purchaseId: createPurchaseItemDto.purchaseId,
         itemId: createPurchaseItemDto.itemId,
+        itemBaseId,
         uomId: createPurchaseItemDto.uomId,
         baseUomId: createPurchaseItemDto.baseUomId,
         unit: parseFloat(createPurchaseItemDto.unit.toString()),
@@ -40,7 +81,7 @@ export class PurchaseItemsService {
         throw new ConflictException('Unique constraint failed. Please check your data.');
       }
 
-      throw new Error(`An unexpected error occurred: ${error.message}`);
+      throw error;
     }
   }
 
@@ -51,6 +92,7 @@ export class PurchaseItemsService {
       .leftJoinAndSelect('purchase.vendor', 'vendor')
       .leftJoinAndSelect('purchaseItem.uoms', 'uoms')
       .leftJoinAndSelect('purchaseItem.item', 'item')
+      .leftJoinAndSelect('purchaseItem.itemBase', 'itemBase')
       .leftJoinAndSelect('purchaseItem.purchaseItemNotes', 'purchaseItemNotes')
       .leftJoinAndSelect('purchaseItemNotes.user', 'user')
       .orderBy('purchaseItem.createdAt', 'DESC')
@@ -83,8 +125,7 @@ export class PurchaseItemsService {
 
     const [purchaseItems, total] = await queryBuilder.getManyAndCount();
 
-    // Calculate total amount sum
-    const totalAmountSum = purchaseItems.reduce((sum, item) => sum + item.unitPrice, 0);
+    const totalAmountSum = purchaseItems.reduce((sum, row) => sum + row.unitPrice, 0);
 
     return {
       purchaseItems,
@@ -99,6 +140,7 @@ export class PurchaseItemsService {
       relations: {
         purchase: true,
         item: true,
+        itemBase: true,
         purchaseItemNotes: {
           user: true,
         },
@@ -109,98 +151,129 @@ export class PurchaseItemsService {
   }
 
   async update(id: string, updatePurchaseItemDto: UpdatePurchaseItemDto) {
-    try {
-      // Fetch the purchase item being updated
-      const purchaseItem = await this.purchaseItemRepository.findOne({
+    return this.purchaseItemRepository.manager.transaction(async (manager) => {
+      const purchaseItem = await manager.findOne(PurchaseItems, {
         where: { id },
-        relations: { item: true }, // Fetch the associated item
+        relations: { item: true },
       });
 
       if (!purchaseItem) {
         throw new NotFoundException(`Purchase Item with ID ${id} not found`);
       }
 
-      // Fetch the related item
       const relatedItem = purchaseItem.item;
-
       if (!relatedItem) {
         throw new NotFoundException(`Related item not found for Purchase Item with ID ${id}`);
       }
 
-      // Calculate the new quantity based on the status
-      let newQuantity = relatedItem.quantity;
+      const prevStatus = purchaseItem.status;
+      const newStatus =
+        updatePurchaseItemDto.status !== undefined
+          ? updatePurchaseItemDto.status
+          : prevStatus;
 
-      switch (updatePurchaseItemDto.status) {
-        case 'Cancelled':
-          newQuantity -= purchaseItem.unit;
-          break;
-        case 'Received':
-          newQuantity += purchaseItem.unit;
-          break;
-        // Add other statuses if needed
-        default:
-          break;
-      }
+      const itemId =
+        updatePurchaseItemDto.itemId !== undefined
+          ? updatePurchaseItemDto.itemId
+          : purchaseItem.itemId;
+      const itemBaseId =
+        updatePurchaseItemDto.itemBaseId !== undefined
+          ? updatePurchaseItemDto.itemBaseId ?? null
+          : purchaseItem.itemBaseId ?? null;
 
-      // Ensure that quantity cannot drop below zero
-      if (newQuantity < 0) {
-        throw new ConflictException(`Item quantity cannot be less than zero.`);
-      }
+      await assertItemVariantLineFields(manager, itemId, itemBaseId);
 
-      // Update the item with the new quantity
-      await this.itemRepository.update(
-        { id: relatedItem.id },
-        { quantity: newQuantity },
+      const dup = await this.findDuplicateLine(
+        purchaseItem.purchaseId,
+        itemId,
+        itemBaseId,
+        id,
       );
+      if (dup) {
+        throw new ConflictException(
+          'Duplicate purchase line for this item and variant on the same purchase.',
+        );
+      }
 
-      // Record bincard movement when stock actually changes
-      if (updatePurchaseItemDto.status === 'Received' || updatePurchaseItemDto.status === 'Cancelled') {
+      const unit = Number(purchaseItem.unit);
+
+      let delta = 0;
+      if (prevStatus !== 'Received' && newStatus === 'Received') {
+        delta = unit;
+      } else if (prevStatus === 'Received' && newStatus !== 'Received') {
+        delta = -unit;
+      }
+
+      let balanceAfter = 0;
+      let usedVariant = false;
+      if (delta !== 0) {
+        const r = await applyInventoryDelta(manager, itemId, itemBaseId, delta);
+        balanceAfter = r.balanceAfter;
+        usedVariant = r.usedVariant;
+
         const movement: RecordBincardMovementDto = {
-          itemId: relatedItem.id,
-          movementType: updatePurchaseItemDto.status === 'Received' ? 'IN' : 'OUT',
-          quantity: purchaseItem.unit,
-          balanceAfter: newQuantity,
+          itemId,
+          itemBaseId: usedVariant ? itemBaseId : null,
+          movementType: delta > 0 ? 'IN' : 'OUT',
+          quantity: Math.abs(delta),
+          balanceAfter,
           referenceType: 'PURCHASE',
           referenceId: purchaseItem.purchaseId,
           description:
-            updatePurchaseItemDto.status === 'Received'
-              ? `Purchase item received`
-              : `Purchase item cancelled – stock adjusted`,
+            delta > 0 ? `Purchase item received` : `Purchase item unreceived – stock adjusted`,
           uomId: purchaseItem.uomId,
         };
         await this.bincardService.recordMovement(movement);
       }
 
-      // Update the purchase item
-      const updateData = {
-        quantity: parseFloat(updatePurchaseItemDto.quantity.toString()),
-        unitPrice: parseFloat(updatePurchaseItemDto.unitPrice.toString()),
-        status: updatePurchaseItemDto.status,
-      };
-
-      await this.purchaseItemRepository.update(id, updateData);
-
-      return this.purchaseItemRepository.findOne({
-        where: { id },
-        relations: { purchaseItemNotes: true }
-      });
-    } catch (error) {
-      console.log('Error updating purchase item:', error);
-
-      if (error.code === 'ER_DUP_ENTRY') {
-        throw new ConflictException('Unique constraint failed. Please check your data.');
+      purchaseItem.itemId = itemId;
+      purchaseItem.itemBaseId = itemBaseId;
+      if (updatePurchaseItemDto.quantity !== undefined) {
+        purchaseItem.quantity = parseFloat(updatePurchaseItemDto.quantity.toString());
       }
+      if (updatePurchaseItemDto.unitPrice !== undefined) {
+        purchaseItem.unitPrice = parseFloat(updatePurchaseItemDto.unitPrice.toString());
+      }
+      purchaseItem.status = newStatus;
 
-      throw new Error('An unexpected error occurred: ' + error.message);
-    }
+      await manager.save(PurchaseItems, purchaseItem);
+
+      return manager.findOne(PurchaseItems, {
+        where: { id },
+        relations: { purchaseItemNotes: true, itemBase: true },
+      });
+    });
   }
 
   async remove(id: string) {
-    const purchaseItem = await this.purchaseItemRepository.findOne({ where: { id } });
-    if (!purchaseItem) {
-      throw new NotFoundException(`Purchase Item with ID ${id} not found`);
-    }
+    return this.purchaseItemRepository.manager.transaction(async (manager) => {
+      const purchaseItem = await manager.findOne(PurchaseItems, { where: { id } });
+      if (!purchaseItem) {
+        throw new NotFoundException(`Purchase Item with ID ${id} not found`);
+      }
 
-    return await this.purchaseItemRepository.remove(purchaseItem);
+      if (purchaseItem.status === 'Received') {
+        const itemBaseId = purchaseItem.itemBaseId ?? null;
+        const r = await applyInventoryDelta(
+          manager,
+          purchaseItem.itemId,
+          itemBaseId,
+          -Number(purchaseItem.unit),
+        );
+        await this.bincardService.recordMovement({
+          itemId: purchaseItem.itemId,
+          itemBaseId: r.usedVariant ? itemBaseId : null,
+          movementType: 'OUT',
+          quantity: Number(purchaseItem.unit),
+          balanceAfter: r.balanceAfter,
+          referenceType: 'PURCHASE',
+          referenceId: purchaseItem.purchaseId,
+          description: 'Purchase line removed – receipt reversed',
+          uomId: purchaseItem.uomId,
+        });
+      }
+
+      return manager.remove(PurchaseItems, purchaseItem);
+    });
   }
 }

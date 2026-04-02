@@ -1,20 +1,26 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateSaleItemDto } from './dto/create-sale-item.dto';
 import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
-import { Item } from 'src/entities/item.entity';
 import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
 import { OrderItems } from 'src/entities/order-item.entity';
+import {
+  applyInventoryDelta,
+  assertItemVariantLineFields,
+  assertSaleRequestedAvailability,
+} from 'src/inventory/item-inventory.util';
 
 @Injectable()
 export class SaleItemsService {
   constructor(
     @InjectRepository(SaleItems)
     private readonly saleItemRepository: Repository<SaleItems>,
-    @InjectRepository(Item)
-    private readonly itemRepository: Repository<Item>,
     @InjectRepository(OrderItems)
     private readonly orderItemsRepository: Repository<OrderItems>,
     private readonly bincardService: BincardService,
@@ -22,9 +28,25 @@ export class SaleItemsService {
 
   async create(createSaleItemDto: CreateSaleItemDto) {
     try {
+      const mgr = this.saleItemRepository.manager;
+      await assertItemVariantLineFields(
+        mgr,
+        createSaleItemDto.itemId,
+        createSaleItemDto.itemBaseId ?? null,
+      );
+      if (createSaleItemDto.status === 'Requested') {
+        await assertSaleRequestedAvailability(
+          mgr,
+          createSaleItemDto.itemId,
+          createSaleItemDto.itemBaseId ?? null,
+          parseFloat(createSaleItemDto.unit.toString()),
+        );
+      }
+
       const saleItem = this.saleItemRepository.create({
         saleId: createSaleItemDto.saleId,
         itemId: createSaleItemDto.itemId,
+        itemBaseId: createSaleItemDto.itemBaseId ?? null,
         uomId: createSaleItemDto.uomId,
         baseUomId: createSaleItemDto.baseUomId,
         unit: parseFloat(createSaleItemDto.unit.toString()),
@@ -33,14 +55,7 @@ export class SaleItemsService {
         status: createSaleItemDto.status,
       });
 
-      const savedSaleItem = await this.saleItemRepository.save(saleItem);
-
-      // Schedule status change if initially set to 'Stocked-out'
-      // if (savedSaleItem.status === 'Stocked-out') {
-      //   this.scheduleStatusChange(savedSaleItem.id, 24 * 60 * 60 * 1000); // 24 hours in milliseconds
-      // }
-
-      return savedSaleItem;
+      return await this.saleItemRepository.save(saleItem);
     } catch (error) {
       console.error('Error creating Sale Item:', error);
 
@@ -48,20 +63,20 @@ export class SaleItemsService {
         throw new ConflictException('Unique constraint failed. Please check your data.');
       }
 
-      throw new Error(`An unexpected error occurred: ${error.message}`);
+      throw error;
     }
   }
 
   async findAll(saleId: string) {
     const saleItems = await this.saleItemRepository.find({
       where: { saleId },
-      relations: ['sale', 'item', 'saleItemNotes', 'saleItemNotes.user'],
+      relations: ['sale', 'item', 'itemBase', 'saleItemNotes', 'saleItemNotes.user'],
     });
     return saleItems;
   }
 
   async update(id: string, updateSaleItemDto: UpdateSaleItemDto) {
-    const result = await this.saleItemRepository.manager.transaction(async (manager) => {
+    return this.saleItemRepository.manager.transaction(async (manager) => {
       const saleItem = await manager.findOne(SaleItems, {
         where: { id },
         relations: ['item'],
@@ -76,113 +91,128 @@ export class SaleItemsService {
         throw new NotFoundException(`Related item not found for Sale Item with ID ${id}`);
       }
 
-      if (updateSaleItemDto.status === 'Requested' && relatedItem.quantity < updateSaleItemDto.quantity) {
-        throw new ConflictException('Requested quantity is more than available quantity');
+      const prevStatus = saleItem.status;
+      const newStatus =
+        updateSaleItemDto.status !== undefined ? updateSaleItemDto.status : prevStatus;
+      const newUnit =
+        updateSaleItemDto.unit !== undefined
+          ? parseFloat(updateSaleItemDto.unit.toString())
+          : saleItem.unit;
+      const newQty =
+        updateSaleItemDto.quantity !== undefined
+          ? parseFloat(updateSaleItemDto.quantity.toString())
+          : saleItem.quantity;
+
+      const itemId =
+        updateSaleItemDto.itemId !== undefined ? updateSaleItemDto.itemId : saleItem.itemId;
+      const itemBaseId =
+        updateSaleItemDto.itemBaseId !== undefined
+          ? updateSaleItemDto.itemBaseId ?? null
+          : saleItem.itemBaseId ?? null;
+
+      await assertItemVariantLineFields(manager, itemId, itemBaseId);
+
+      if (newStatus === 'Requested') {
+        await assertSaleRequestedAvailability(manager, itemId, itemBaseId, newUnit);
       }
 
-      let newQuantity = relatedItem.quantity;
-      if (updateSaleItemDto.status === 'Cancelled') {
-        newQuantity = relatedItem.quantity + saleItem.unit;
-      } else if (updateSaleItemDto.status === 'Stocked-out') {
-        newQuantity = relatedItem.quantity - saleItem.unit;
+      let stockDelta = 0;
+      if (prevStatus !== 'Stocked-out' && newStatus === 'Stocked-out') {
+        stockDelta = -newUnit;
+      } else if (prevStatus === 'Stocked-out' && newStatus !== 'Stocked-out') {
+        stockDelta = Number(saleItem.unit);
       }
 
-      if (newQuantity < 0) {
-        throw new ConflictException(`Quantity cannot drop below zero for Sale Item with ID ${id}`);
+      let balanceAfter = 0;
+      let usedVariant = false;
+      if (stockDelta !== 0) {
+        const r = await applyInventoryDelta(manager, itemId, itemBaseId, stockDelta);
+        balanceAfter = r.balanceAfter;
+        usedVariant = r.usedVariant;
       }
 
-      await manager.update(Item, relatedItem.id, { quantity: newQuantity });
+      saleItem.itemId = itemId;
+      saleItem.itemBaseId = itemBaseId;
+      saleItem.quantity = newQty;
+      if (updateSaleItemDto.description !== undefined) {
+        saleItem.description = updateSaleItemDto.description;
+      }
+      saleItem.status = newStatus;
+      saleItem.unit = newUnit;
+      const updatedSaleItem = await manager.save(SaleItems, saleItem);
 
-      const updatedSaleItem = await manager.save(SaleItems, {
-        id,
-        quantity: parseFloat(updateSaleItemDto.quantity.toString()),
-        description: updateSaleItemDto.description,
-        status: updateSaleItemDto.status,
-        unit: parseFloat(updateSaleItemDto.unit.toString()),
-      });
-
-      // Record bincard movement when stock is actually issued or returned
-      if (updateSaleItemDto.status === 'Stocked-out' || updateSaleItemDto.status === 'Cancelled') {
+      if (stockDelta !== 0) {
         const movement: RecordBincardMovementDto = {
-          itemId: relatedItem.id,
-          movementType: updateSaleItemDto.status === 'Stocked-out' ? 'OUT' : 'IN',
-          quantity: saleItem.unit,
-          balanceAfter: newQuantity,
+          itemId,
+          itemBaseId: usedVariant ? itemBaseId : null,
+          movementType: stockDelta < 0 ? 'OUT' : 'IN',
+          quantity: Math.abs(stockDelta),
+          balanceAfter,
           referenceType: 'SALE',
           referenceId: saleItem.saleId,
           description:
-            updateSaleItemDto.status === 'Stocked-out'
+            stockDelta < 0
               ? 'Stocked-out for production/sale'
-              : 'Sale item cancelled – stock returned',
+              : 'Sale line reverted – stock returned',
           uomId: saleItem.uomId,
         };
         await this.bincardService.recordMovement(movement);
       }
 
-      // If this sale item is linked to an order item, and all linked sale items are stocked-out,
-      // mark the order item's storeRequestStatus as "Issued".
-      if (saleItem.orderItemId && updateSaleItemDto.status === 'Stocked-out') {
+      if (saleItem.orderItemId && newStatus === 'Stocked-out') {
         const relatedOrderItemId = saleItem.orderItemId;
         const relatedSaleItems = await manager.find(SaleItems, {
           where: { orderItemId: relatedOrderItemId },
         });
-        const allStockedOut = relatedSaleItems.length > 0 && relatedSaleItems.every(si => si.status === 'Stocked-out');
+        const allStockedOut =
+          relatedSaleItems.length > 0 &&
+          relatedSaleItems.every((si) => si.status === 'Stocked-out');
         if (allStockedOut) {
-          await manager.update(OrderItems, { id: relatedOrderItemId }, { storeRequestStatus: 'Issued' });
+          await manager.update(
+            OrderItems,
+            { id: relatedOrderItemId },
+            { storeRequestStatus: 'Issued' },
+          );
         }
       }
 
       return updatedSaleItem;
     });
-
-    return result;
   }
 
   async remove(id: string) {
-    // Fetch the sale item along with associated item
-    const saleItem = await this.saleItemRepository.findOne({
-      where: { id },
-      relations: ['item'],
+    return this.saleItemRepository.manager.transaction(async (manager) => {
+      const saleItem = await manager.findOne(SaleItems, {
+        where: { id },
+        relations: ['item'],
+      });
+
+      if (!saleItem) {
+        throw new NotFoundException(`Sale Item with ID ${id} not found`);
+      }
+
+      if (saleItem.status === 'Stocked-out') {
+        const itemBaseId = saleItem.itemBaseId ?? null;
+        const r = await applyInventoryDelta(
+          manager,
+          saleItem.itemId,
+          itemBaseId,
+          Number(saleItem.unit),
+        );
+        await this.bincardService.recordMovement({
+          itemId: saleItem.itemId,
+          itemBaseId: r.usedVariant ? itemBaseId : null,
+          movementType: 'IN',
+          quantity: Number(saleItem.unit),
+          balanceAfter: r.balanceAfter,
+          referenceType: 'SALE',
+          referenceId: saleItem.saleId,
+          description: 'Sale item removed – stock returned',
+          uomId: saleItem.uomId,
+        });
+      }
+
+      return manager.remove(SaleItems, saleItem);
     });
-
-    if (!saleItem) {
-      throw new NotFoundException(`Sale Item with ID ${id} not found`);
-    }
-
-    // Fetch the related item
-    const relatedItem = saleItem.item;
-
-    if (!relatedItem) {
-      throw new NotFoundException(`Related item not found for Sale Item with ID ${id}`);
-    }
-
-    // Calculate the new quantity
-    const newQuantity = relatedItem.quantity - saleItem.quantity;
-
-    // Ensure that quantity cannot drop below zero
-    if (newQuantity < 0) {
-      throw new ConflictException(`Quantity cannot drop below zero for Sale Item with ID ${id}`);
-    }
-
-    // Update the related item with the new quantity
-    await this.itemRepository.update(relatedItem.id, { quantity: newQuantity });
-
-    // Delete the sale item
-    const deletedSaleItem = await this.saleItemRepository.remove(saleItem);
-
-    return deletedSaleItem;
   }
-
-  // private async scheduleStatusChange(id: string, delay: number) {
-  //   setTimeout(async () => {
-  //     const saleItem = await this.saleItemRepository.findOne({
-  //       where: { id },
-  //       select: ['status'],
-  //     });
-
-  //     if (saleItem?.status === 'Stocked-out') {
-  //       await this.saleItemRepository.update(id, { status: 'Sent' });
-  //     }
-  //   }, delay);
-  // }
 }

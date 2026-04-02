@@ -8,6 +8,7 @@ import {
   PrimaryColumn,
 } from 'typeorm';
 import { Item } from './item.entity';
+import { ItemBase } from './item-base.entity';
 import { UOM } from './uom.entity';
 import { randomUUID } from 'crypto';
 
@@ -33,6 +34,9 @@ export class Bincard {
 
   @Column()
   itemId: string;
+
+  @Column({ nullable: true })
+  itemBaseId: string;
 
   @Column({ type: 'varchar', length: 3 })
   movementType: BincardMovementType;
@@ -61,6 +65,10 @@ export class Bincard {
   @ManyToOne(() => Item, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'itemId' })
   item: Item;
+
+  @ManyToOne(() => ItemBase, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'itemBaseId' })
+  itemBase: ItemBase;
 
   @ManyToOne(() => UOM, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'uomId' })

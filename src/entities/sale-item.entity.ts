@@ -5,6 +5,7 @@ import { UOM } from './uom.entity';
 import { SalesItemNote } from './sales-item-note.entity';
 import { randomUUID } from 'crypto';
 import { OrderItems } from './order-item.entity';
+import { ItemBase } from './item-base.entity';
 
 @Entity('sale_items')
 export class SaleItems {
@@ -23,6 +24,10 @@ export class SaleItems {
 
   @Column()
   itemId: string;
+
+  /** When set, stock moves on this base/ADD variant instead of parent item quantity only. */
+  @Column({ nullable: true })
+  itemBaseId: string;
 
   @Column()
   quantity: number;
@@ -55,6 +60,10 @@ export class SaleItems {
   @ManyToOne(() => Item, item => item.sales)
   @JoinColumn({ name: 'itemId' })
   item: Item;
+
+  @ManyToOne(() => ItemBase, { nullable: true, onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'itemBaseId' })
+  itemBase: ItemBase;
 
   @ManyToOne(() => Sale, sale => sale.saleItems)
   @JoinColumn({ name: 'saleId' })

@@ -1,4 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  assertItemVariantLineFields,
+  assertSaleRequestedAvailability,
+} from 'src/inventory/item-inventory.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -20,19 +24,17 @@ export class SalesService {
     const { saleItems, ...saleData } = createSaleDto;
 
     try {
-      // Fetch the relevant items from the database
+      const mgr = this.itemRepository.manager;
       for (const item of saleItems) {
-        const relatedItem = await this.itemRepository.findOne({
-          where: { id: item.itemId },
-          select: ['quantity', 'name'],
-        });
-
-        if (!relatedItem) {
-          throw new NotFoundException(`Item with ID ${item.itemId} not found.`);
-        }
-
-        if (item.status === 'Requested' && relatedItem.quantity < item.unit) {
-          throw new ConflictException(`Requested quantity is more than available quantity for item "${relatedItem.name}"`);
+        const itemBaseId = item.itemBaseId ?? null;
+        await assertItemVariantLineFields(mgr, item.itemId, itemBaseId);
+        if (item.status === 'Requested') {
+          await assertSaleRequestedAvailability(
+            mgr,
+            item.itemId,
+            itemBaseId,
+            parseFloat(item.unit.toString()),
+          );
         }
       }
 
@@ -53,13 +55,13 @@ export class SalesService {
         id: randomUUID(),
         saleId: savedSale.id,
         itemId: item.itemId,
+        itemBaseId: item.itemBaseId ?? null,
         uomId: item.uomId,
         quantity: item.quantity,
         description: item.description,
         status: item.status,
         unit: parseFloat(item.unit.toString()),
         baseUomId: item.baseUomId,
-        // Preserve optional orderItemId link if provided (for auto storeRequestStatus syncing)
         orderItemId: (item as any).orderItemId ?? null,
       }));
 
@@ -139,19 +141,17 @@ export class SalesService {
     const itemsToDelete = existingItemIds.filter(id => !newItemIds.includes(id));
 
     try {
-      // Validate each sale item
+      const mgr = this.itemRepository.manager;
       for (const item of saleItems) {
-        const relatedItem = await this.itemRepository.findOne({
-          where: { id: item.itemId },
-          select: ['quantity', 'name'],
-        });
-
-        if (!relatedItem) {
-          throw new NotFoundException(`Item with ID ${item.itemId} not found.`);
-        }
-
-        if (item.status === 'Requested' && relatedItem.quantity < item.unit) {
-          throw new ConflictException(`Requested quantity is more than available quantity for item "${relatedItem.name}"`);
+        const itemBaseId = item.itemBaseId ?? null;
+        await assertItemVariantLineFields(mgr, item.itemId, itemBaseId);
+        if (item.status === 'Requested') {
+          await assertSaleRequestedAvailability(
+            mgr,
+            item.itemId,
+            itemBaseId,
+            parseFloat(item.unit.toString()),
+          );
         }
       }
 
@@ -181,6 +181,7 @@ export class SalesService {
             .update('sale_items')
             .set({
               itemId: item.itemId,
+              itemBaseId: item.itemBaseId ?? null,
               uomId: item.uomId,
               quantity: item.quantity,
               description: item.description,
@@ -200,6 +201,7 @@ export class SalesService {
               id: randomUUID(),
               saleId: id,
               itemId: item.itemId,
+              itemBaseId: item.itemBaseId ?? null,
               uomId: item.uomId,
               quantity: item.quantity,
               description: item.description,

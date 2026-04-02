@@ -509,6 +509,7 @@ export class OrderItemsService {
         saleItems.push({
           id: '',
           itemId: orderItem.itemId,
+          ...(orderItem.itemBaseId ? { itemBaseId: orderItem.itemBaseId } : {}),
           uomId: orderItem.uomId,
           baseUomId: orderItem.baseUomId,
           quantity,
