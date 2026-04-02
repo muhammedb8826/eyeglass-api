@@ -14,5 +14,6 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     address?: string;
     roles?: Role;
     profile?: string;
+    is_active?: boolean;
     isActive?: boolean;
 }

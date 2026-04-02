@@ -1,4 +1,4 @@
-## Eyeglass Lens API – Frontend Integration Guide
+# Eyeglass Lens API – Frontend Integration Guide
 
 This backend is configured for **eyeglass lens production**.  
 This README explains how a frontend should **send and read data** for the eyeglass‑specific fields.
@@ -108,6 +108,7 @@ All are optional in the API; enforce what you need in the UI.
   - `pdMonocularRight`, `pdMonocularLeft` – monocular PD values
 
 **Addition (ADD)**  
+
 - Prefer **from the doctor’s prescription**: send `addRight`, `addLeft` in diopters (e.g. `2.5` for +2.50 D).  
 - If ADD is **not** on the prescription, derive it from the **spare (reading) prescription**:
   - **ADD = close vision power − distance vision power** (same eye).
@@ -446,3 +447,68 @@ Expect and handle these as validation/business errors:
 - Show variant stock (`ItemBase.quantity`) in dropdown options to prevent wrong picks.
 - For existing historical rows where `itemBaseId` is missing on variant items, show a warning badge and prevent issuing/receiving until corrected.
 
+---
+
+## 8. RBAC (Roles) + User Activation/Deactivation
+
+This backend uses:
+
+- **JWT auth** for all endpoints (unless explicitly marked public).
+- **RBAC** via `roles` on the user and server-side role guard.
+
+### 8.1 Roles
+
+Users have a single `roles` value (enum), for example:
+
+- `ADMIN`
+- `RECEPTION`
+- `LAB_TECHNICIAN`
+- `OPERATOR`
+- `FINANCE`
+- `DISPENSER`
+- `PURCHASER`
+- `USER`
+
+Frontend can read it from the signed-in user object and use it to show/hide menus, but backend enforces it.
+
+### 8.2 Admin-only user management
+
+All `/api/v1/users/*` endpoints require:
+
+- `Authorization: Bearer <accessToken>`
+- User must have `roles = "ADMIN"`
+
+If a non-admin calls these endpoints, expect HTTP 403/401.
+
+### 8.3 Activate / deactivate user accounts
+
+Industry-standard behavior: deactivated users cannot sign in or access protected APIs.
+
+Endpoints (admin only):
+
+- **Activate**
+  - `PATCH /api/v1/users/:id/activate`
+- **Deactivate**
+  - `PATCH /api/v1/users/:id/deactivate`
+
+Admin account safety:
+
+- The `ADMIN` account cannot be deactivated or deleted.
+
+Example deactivate request:
+
+```http
+PATCH /api/v1/users/USER_UUID/deactivate
+Authorization: Bearer <adminAccessToken>
+```
+
+### 8.4 What happens when a user is deactivated
+
+- `POST /api/v1/signin` fails with: `Account is deactivated`
+- `POST /api/v1/refresh` fails with: `Account is deactivated`
+- Any protected endpoint using an access token fails with: `Account is inactive or does not exist`
+
+Frontend checklist:
+
+- If you receive any of the above, clear local tokens and redirect to login.
+- In admin UI, show a toggle/button for active status and reflect `is_active`.

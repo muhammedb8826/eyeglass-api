@@ -88,8 +88,17 @@ export class UsersService {
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
 
     const updateData: any = { ...updateUserDto };
-    if (updateUserDto.is_active !== undefined) {
-      updateData.is_active = Boolean(updateUserDto.is_active);
+    const requestedIsActive =
+      updateUserDto.is_active !== undefined
+        ? Boolean(updateUserDto.is_active)
+        : updateUserDto.isActive !== undefined
+          ? Boolean(updateUserDto.isActive)
+          : undefined;
+    if (requestedIsActive === false && user.roles === Role.ADMIN) {
+      throw new ForbiddenException('Admin account cannot be deactivated.');
+    }
+    if (requestedIsActive !== undefined) {
+      updateData.is_active = requestedIsActive;
     }
     if (updateUserDto.profile) {
       updateData.profile = `/uploads/profile/${updateUserDto.profile}`;
@@ -103,7 +112,20 @@ export class UsersService {
   async remove(id: string) {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException(`User with ID ${id} not found`);
+    if (user.roles === Role.ADMIN) {
+      throw new ForbiddenException('Admin account cannot be deleted.');
+    }
     return this.userRepository.remove(user);
+  }
+
+  async setActiveStatus(id: string, isActive: boolean) {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException(`User with ID ${id} not found`);
+    if (user.roles === Role.ADMIN) {
+      throw new ForbiddenException('Admin account cannot be activated/deactivated.');
+    }
+    await this.userRepository.update(id, { is_active: isActive });
+    return this.userRepository.findOne({ where: { id } });
   }
 
   async resetPassword(userId: string, newPassword: string) {

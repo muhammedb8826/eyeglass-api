@@ -49,6 +49,9 @@ export class AuthService {
         if (!user) {
             throw new NotFoundException(`No user found for email: ${email}`);
         }
+        if (!user.is_active) {
+            throw new ForbiddenException('Account is deactivated');
+        }
 
         const passwordMatches = await bcrypt.compare(dto.password, user.password);
         if (!passwordMatches) throw new ForbiddenException('Check password');
@@ -76,6 +79,7 @@ export class AuthService {
         });
         
         if (!user || !user.passwordRT) throw new ForbiddenException('Access Denied');
+        if (!user.is_active) throw new ForbiddenException('Account is deactivated');
         
         const rtMatches = await bcrypt.compare(rt, user.passwordRT);
         if (!rtMatches) throw new ForbiddenException('Access Denied');

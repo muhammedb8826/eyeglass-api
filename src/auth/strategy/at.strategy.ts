@@ -30,8 +30,8 @@ export class AtStrategy extends PassportStrategy(Strategy, 'jwt') {
             }
         });
         
-        if (!user) {
-            throw new UnauthorizedException();
+        if (!user || !user.is_active) {
+            throw new UnauthorizedException('Account is inactive or does not exist');
         }
         
         delete user.password;

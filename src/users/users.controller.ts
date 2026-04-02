@@ -12,6 +12,8 @@ import { AtGuard, RolesGuard } from '../common';
 import { Roles } from '../decorators';
 
 @Controller('users')
+@UseGuards(AtGuard, RolesGuard)
+@Roles(Role.ADMIN)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -65,10 +67,18 @@ export class UsersController {
   }
 
   @Patch(':id/reset-password')
-  @UseGuards(AtGuard, RolesGuard)
-  @Roles(Role.ADMIN)
   resetPassword(@Param('id') id: string, @Body() resetPasswordDto: ResetPasswordDto) {
     return this.usersService.resetPassword(id, resetPasswordDto.newPassword);
+  }
+
+  @Patch(':id/activate')
+  activate(@Param('id') id: string) {
+    return this.usersService.setActiveStatus(id, true);
+  }
+
+  @Patch(':id/deactivate')
+  deactivate(@Param('id') id: string) {
+    return this.usersService.setActiveStatus(id, false);
   }
 
   @Patch(':id')
