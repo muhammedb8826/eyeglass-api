@@ -1,11 +1,10 @@
-/** Eyeglass lens lab standard roles */
+/** Business roles for eyeglass lab + retail + stock operations */
 export enum Role {
-  USER = 'USER',
   ADMIN = 'ADMIN',
-  RECEPTION = 'RECEPTION',
-  LAB_TECHNICIAN = 'LAB_TECHNICIAN',
-  OPERATOR = 'OPERATOR',
   FINANCE = 'FINANCE',
-  DISPENSER = 'DISPENSER',
-  PURCHASER = 'PURCHASER',
-} 
+  SALES = 'SALES',
+  CASHIER = 'CASHIER',
+  PRODUCTION = 'PRODUCTION',
+  STORE_KEEPER = 'STORE_KEEPER',
+  QUALITY_CONTROL = 'QUALITY_CONTROL',
+}

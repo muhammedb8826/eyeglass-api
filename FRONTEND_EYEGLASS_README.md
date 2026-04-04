@@ -460,16 +460,17 @@ This backend uses:
 
 ### 8.1 Roles
 
-Users have a single `roles` value (enum), for example:
+Users have a single `roles` value (enum):
 
-- `ADMIN`
-- `RECEPTION`
-- `LAB_TECHNICIAN`
-- `OPERATOR`
-- `FINANCE`
-- `DISPENSER`
-- `PURCHASER`
-- `USER`
+- `ADMIN` — full access
+- `FINANCE` — purchases, payments, finance masters, reporting
+- `SALES` — customers, orders, order lines, store requests / sales documents
+- `CASHIER` — checkout: customers, orders, order lines, payment-related reads
+- `PRODUCTION` — lab: move lines through **InProgress** / **Ready** (requires `production.write`)
+- `STORE_KEEPER` — stock: sales/store fulfillment, purchases receipt, operator stock, bincard
+- `QUALITY_CONTROL` — set line **qualityControlStatus** (requires `quality_control.write`)
+
+**Self-signup** (`POST /signup`) assigns role **`CASHIER`** unless an admin changes it.
 
 Use `roles` for coarse UI grouping; use **permissions** (below) for accurate menu/route guards.
 
@@ -483,6 +484,8 @@ The API applies a **global permission guard** after JWT authentication:
 
 If a route is authenticated but the backend forgot to declare a permission (and it is not public/skip), the API responds with **403** and a message that the route must be assigned permissions or marked public/skip — that indicates a server configuration bug, not a missing role grant.
 
+**Order line PATCH (`PATCH /order-items/:id`):** the route allows **any of** `order_items.write`, `production.write`, or `quality_control.write` past the guard, but the service then requires the **right** permission(s) for the fields you change (AND when multiple kinds of change are sent). For example, moving a line to **InProgress** / **Ready** needs `production.write`; changing **qualityControlStatus** needs `quality_control.write`; approval, store request, delivery, and structural fields need `order_items.write`.
+
 ### 8.3 Permission codes (`resource.action`)
 
 Codes used by the API (non-exhaustive; `GET /permissions` returns the full catalog):
@@ -491,6 +494,8 @@ Codes used by the API (non-exhaustive; `GET /permissions` returns the full catal
 - `permissions.manage` — view/edit which permissions each role has (`/permissions/matrix`, `PUT /permissions/roles/...`, etc.)
 - `orders.read` / `orders.write`
 - `order_items.read` / `order_items.write`
+- `production.write` — order line status in the lab (**InProgress**, **Ready**, and related transitions)
+- `quality_control.write` — order line `qualityControlStatus` (**Passed** / **Failed** / **Pending**)
 - `customers.read` / `customers.write`
 - `items.read` / `items.write`
 - `purchases.read` / `purchases.write`
@@ -516,7 +521,7 @@ On first database bootstrap, the server seeds the **permission catalog** and a *
   Response shape:
 
   ```json
-  { "role": "LAB_TECHNICIAN", "permissions": ["items.read", "orders.read", ...] }
+  { "role": "PRODUCTION", "permissions": ["items.read", "orders.read", ...] }
   ```
 
 - **Full catalog** (labels / admin UI):

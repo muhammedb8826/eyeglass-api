@@ -6,12 +6,15 @@ import { UpdateOrderItemDto } from './dto/update-order-item.dto';
 import { OrderItems } from 'src/entities/order-item.entity';
 import { Order } from 'src/entities/order.entity';
 import { PaymentTerm } from 'src/entities/payment-term.entity';
+import { User } from 'src/entities/user.entity';
 import { OrdersService } from 'src/orders/orders.service';
 import { SalesService } from 'src/sales/sales.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { CreateSaleDto } from 'src/sales/dto/create-sale.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
 import { assertWorkflowOnlyOrderItemPayload } from './order-item-workflow.guard';
+import { assertOrderItemPatchPermissions } from './order-item-patch-policy';
+import { PermissionsService } from 'src/permissions/permissions.service';
 
 @Injectable()
 export class OrderItemsService {
@@ -26,6 +29,7 @@ export class OrderItemsService {
     private readonly ordersService: OrdersService,
     private readonly salesService: SalesService,
     private readonly notificationsService: NotificationsService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   async create(createOrderItemDto: CreateOrderItemDto) {
@@ -184,7 +188,7 @@ export class OrderItemsService {
     });
   }
 
-  async update(id: string, updateOrderItemDto: UpdateOrderItemDto) {
+  async update(id: string, updateOrderItemDto: UpdateOrderItemDto, user: User) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -246,6 +250,18 @@ export class OrderItemsService {
           ? 'Requested'
           : 'None';
       }
+
+      await assertOrderItemPatchPermissions(
+        this.permissionsService,
+        user,
+        currentOrderItem,
+        updateOrderItemDto,
+        {
+          nextStatus: nextStatus,
+          nextQualityControlStatus: newQualityControlStatus,
+          qcFailureRemake,
+        },
+      );
 
       const orderIdForPayment = currentOrderItem.orderId;
       const orderPayment = await this.paymentTermRepository.findOne({

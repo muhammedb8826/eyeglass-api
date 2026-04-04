@@ -174,14 +174,13 @@ Requires `ADMIN` role. New password must be at least 6 characters.
 
 | Role | Value |
 |------|-------|
-| User | `USER` |
 | Admin | `ADMIN` |
-| Reception | `RECEPTION` |
-| Lab Technician | `LAB_TECHNICIAN` |
-| Operator | `OPERATOR` |
 | Finance | `FINANCE` |
-| Dispenser | `DISPENSER` |
-| Purchaser | `PURCHASER` |
+| Sales | `SALES` |
+| Cashier | `CASHIER` |
+| Production | `PRODUCTION` |
+| Store Keeper | `STORE_KEEPER` |
+| Quality Control | `QUALITY_CONTROL` |
 
 ---
 

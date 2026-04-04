@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from 'src/enums/role.enum';
-import { PERMISSIONS_KEY } from 'src/decorators/permissions.decorator';
+import {
+  PERMISSIONS_ANY_KEY,
+  PERMISSIONS_KEY,
+} from 'src/decorators/permissions.decorator';
 import { SKIP_PERMISSIONS_KEY } from 'src/decorators/skip-permissions.decorator';
 import { PermissionsService } from './permissions.service';
 
@@ -34,13 +37,21 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    const required = this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const required =
+      this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? [];
+
+    const requiredAny =
+      this.reflector.getAllAndOverride<string[]>(PERMISSIONS_ANY_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? [];
+
     const { user } = context.switchToHttp().getRequest();
 
-    if (!required?.length) {
+    if (!required.length && !requiredAny.length) {
       if (user) {
         throw new ForbiddenException(
           'This route is not assigned any permission. Use @RequirePermissions, @Public, or @SkipPermissions.',
@@ -63,6 +74,22 @@ export class PermissionsGuard implements CanActivate {
         throw new ForbiddenException(`Missing permission: ${code}`);
       }
     }
+
+    if (requiredAny.length) {
+      let anyOk = false;
+      for (const code of requiredAny) {
+        if (await this.permissionsService.roleHasPermission(user.roles, code)) {
+          anyOk = true;
+          break;
+        }
+      }
+      if (!anyOk) {
+        throw new ForbiddenException(
+          `Missing one of: ${requiredAny.join(', ')}`,
+        );
+      }
+    }
+
     return true;
   }
 }

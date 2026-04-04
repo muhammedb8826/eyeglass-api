@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { Tokens } from './types';
 import { JwtService } from '@nestjs/jwt';
 import { User } from 'src/entities/user.entity';
+import { Role } from 'src/enums/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,7 @@ export class AuthService {
                 confirm_password: hashedPassword,
                 phone,
                 address,
+                roles: Role.CASHIER,
             });
             
             const savedUser = await this.userRepository.save(newUser);

@@ -12,6 +12,12 @@ export const Permissions = {
   ORDER_ITEMS_READ: 'order_items.read',
   ORDER_ITEMS_WRITE: 'order_items.write',
 
+  /** Line status InProgress / Ready and related lab transitions (not cashier delivery). */
+  PRODUCTION_WRITE: 'production.write',
+
+  /** Set order line `qualityControlStatus` (Passed / Failed / Pending). */
+  QUALITY_CONTROL_WRITE: 'quality_control.write',
+
   CUSTOMERS_READ: 'customers.read',
   CUSTOMERS_WRITE: 'customers.write',
 

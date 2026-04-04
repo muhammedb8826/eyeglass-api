@@ -2,8 +2,13 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestj
 import { OrderItemsService } from './order-items.service';
 import { CreateOrderItemDto } from './dto/create-order-item.dto';
 import { UpdateOrderItemDto } from './dto/update-order-item.dto';
-import { RequirePermissions } from 'src/decorators/permissions.decorator';
+import {
+  RequireAnyPermissions,
+  RequirePermissions,
+} from 'src/decorators/permissions.decorator';
 import { Permissions } from 'src/permissions/permission.constants';
+import { GetCurrentUser } from 'src/decorators';
+import { User } from 'src/entities/user.entity';
 
 @Controller('order-items')
 @RequirePermissions(Permissions.ORDER_ITEMS_READ)
@@ -37,9 +42,17 @@ export class OrderItemsController {
   }
 
   @Patch(':id')
-  @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
-  async update(@Param('id') id: string, @Body() updateOrderItemDto: UpdateOrderItemDto) {
-    return this.orderItemsService.update(id, updateOrderItemDto);
+  @RequireAnyPermissions(
+    Permissions.ORDER_ITEMS_WRITE,
+    Permissions.PRODUCTION_WRITE,
+    Permissions.QUALITY_CONTROL_WRITE,
+  )
+  async update(
+    @Param('id') id: string,
+    @Body() updateOrderItemDto: UpdateOrderItemDto,
+    @GetCurrentUser() user: User,
+  ) {
+    return this.orderItemsService.update(id, updateOrderItemDto, user);
   }
 
   @Delete(':id')

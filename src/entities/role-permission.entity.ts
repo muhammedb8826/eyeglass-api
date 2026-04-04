@@ -24,7 +24,8 @@ export class RolePermission {
     }
   }
 
-  @Column({ type: 'enum', enum: Role })
+  /** Default lets TypeORM sync add NOT NULL `role` without failing on existing rows. */
+  @Column({ type: 'varchar', length: 64, default: Role.CASHIER })
   role: Role;
 
   @Column()

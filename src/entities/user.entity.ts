@@ -57,7 +57,8 @@ export class User {
   @Column({ nullable: true })
   profile: string;
 
-  @Column({ type: 'enum', enum: Role, default: Role.ADMIN })
+  /** VARCHAR avoids PostgreSQL enum migration failures when role values change; validate in app. */
+  @Column({ type: 'varchar', length: 64, default: Role.CASHIER })
   roles: Role;
 
   @Column()
