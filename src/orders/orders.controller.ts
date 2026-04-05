@@ -1,10 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  Req,
+} from '@nestjs/common';
+import { Request } from 'express';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { Public } from '../decorators/public.decorator';
 import { RequirePermissions } from 'src/decorators/permissions.decorator';
 import { Permissions } from 'src/permissions/permission.constants';
+import { User } from 'src/entities/user.entity';
 
 @Controller('orders')
 @RequirePermissions(Permissions.ORDERS_READ)
@@ -13,16 +25,28 @@ export class OrdersController {
 
   @Public()
   @Post()
-  create(@Body() createOrderDto: CreateOrderDto) {
-    return this.ordersService.create(createOrderDto);
+  create(
+    @Body() createOrderDto: CreateOrderDto,
+    @Req() req: Request,
+  ) {
+    return this.ordersService.create(
+      createOrderDto,
+      req.user as User | undefined,
+    );
   }
 
   @Public()
   @Post('debug')
-  async debugCreate(@Body() createOrderDto: CreateOrderDto) {
+  async debugCreate(
+    @Body() createOrderDto: CreateOrderDto,
+    @Req() req: Request,
+  ) {
     try {
       console.log('Debug: Received order data:', JSON.stringify(createOrderDto, null, 2));
-      const result = await this.ordersService.create(createOrderDto);
+      const result = await this.ordersService.create(
+        createOrderDto,
+        req.user as User | undefined,
+      );
       console.log('Debug: Order created successfully:', result.id);
       return result;
     } catch (error) {
@@ -88,8 +112,16 @@ export class OrdersController {
 
   @Patch(':id')
   @RequirePermissions(Permissions.ORDERS_WRITE)
-  async update(@Param('id') id: string, @Body() updateOrderDto: UpdateOrderDto) {
-    return this.ordersService.update(id, updateOrderDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateOrderDto: UpdateOrderDto,
+    @Req() req: Request,
+  ) {
+    return this.ordersService.update(
+      id,
+      updateOrderDto,
+      req.user as User,
+    );
   }
 
   @Delete(':id')

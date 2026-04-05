@@ -12,9 +12,16 @@ import { SalesService } from 'src/sales/sales.service';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { CreateSaleDto } from 'src/sales/dto/create-sale.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
-import { assertWorkflowOnlyOrderItemPayload } from './order-item-workflow.guard';
+import {
+  assertWorkflowOnlyOrderItemPayload,
+  orderItemFieldChanged,
+} from './order-item-workflow.guard';
 import { assertOrderItemPatchPermissions } from './order-item-patch-policy';
 import { PermissionsService } from 'src/permissions/permissions.service';
+import {
+  assertCanManageApprovals,
+  isApprovedLabel,
+} from 'src/approvals/approval-authority.util';
 
 @Injectable()
 export class OrderItemsService {
@@ -32,7 +39,18 @@ export class OrderItemsService {
     private readonly permissionsService: PermissionsService,
   ) {}
 
-  async create(createOrderItemDto: CreateOrderItemDto) {
+  async create(createOrderItemDto: CreateOrderItemDto, user: User) {
+    if (
+      isApprovedLabel(createOrderItemDto.approvalStatus) ||
+      createOrderItemDto.adminApproval === true
+    ) {
+      await assertCanManageApprovals(
+        this.permissionsService,
+        user,
+        'Order line create with approval',
+      );
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -249,6 +267,33 @@ export class OrderItemsService {
         nextStoreRequestStatus = updateOrderItemDto.operatorId?.trim()
           ? 'Requested'
           : 'None';
+      }
+
+      if (
+        updateOrderItemDto.adminApproval !== undefined &&
+        orderItemFieldChanged(
+          updateOrderItemDto.adminApproval,
+          currentOrderItem.adminApproval,
+        )
+      ) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'Order line admin approval',
+        );
+      }
+
+      if (
+        !qcFailureRemake &&
+        nextApprovalStatus !== currentOrderItem.approvalStatus &&
+        (isApprovedLabel(nextApprovalStatus) ||
+          isApprovedLabel(currentOrderItem.approvalStatus))
+      ) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'Order line approval status',
+        );
       }
 
       await assertOrderItemPatchPermissions(

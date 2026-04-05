@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { PurchasesService } from './purchases.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
 import { UpdatePurchaseDto } from './dto/update-purchase.dto';
 import { RequirePermissions } from 'src/decorators/permissions.decorator';
 import { Permissions } from 'src/permissions/permission.constants';
+import { User } from 'src/entities/user.entity';
 
 @Controller('purchases')
 @RequirePermissions(Permissions.PURCHASES_READ)
@@ -12,8 +14,14 @@ export class PurchasesController {
 
   @Post()
   @RequirePermissions(Permissions.PURCHASES_WRITE)
-  create(@Body() createPurchaseDto: CreatePurchaseDto) {
-    return this.purchasesService.create(createPurchaseDto);
+  create(
+    @Body() createPurchaseDto: CreatePurchaseDto,
+    @Req() req: Request,
+  ) {
+    return this.purchasesService.create(
+      createPurchaseDto,
+      req.user as User,
+    );
   }
 
   @Get()
@@ -44,8 +52,16 @@ export class PurchasesController {
 
   @Patch(':id')
   @RequirePermissions(Permissions.PURCHASES_WRITE)
-  update(@Param('id') id: string, @Body() updatePurchaseDto: UpdatePurchaseDto) {
-    return this.purchasesService.update(id, updatePurchaseDto);
+  update(
+    @Param('id') id: string,
+    @Body() updatePurchaseDto: UpdatePurchaseDto,
+    @Req() req: Request,
+  ) {
+    return this.purchasesService.update(
+      id,
+      updatePurchaseDto,
+      req.user as User,
+    );
   }
 
   @Delete(':id')

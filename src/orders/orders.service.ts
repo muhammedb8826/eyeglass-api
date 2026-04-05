@@ -17,6 +17,12 @@ import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolService } from 'src/lab-tool/lab-tool.service';
 import { assertWorkflowOnlyOrderItemPayload } from 'src/order-items/order-item-workflow.guard';
+import { User } from 'src/entities/user.entity';
+import { PermissionsService } from 'src/permissions/permissions.service';
+import {
+  assertCanManageApprovals,
+  isApprovedLabel,
+} from 'src/approvals/approval-authority.util';
 import {
   isValidDatePreset,
   OrderDatePreset,
@@ -76,6 +82,7 @@ export class OrdersService {
     private readonly unitCategoryRepository: Repository<UnitCategory>,
     private readonly dataSource: DataSource,
     private readonly labToolService: LabToolService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   /**
@@ -192,7 +199,21 @@ export class OrdersService {
     }
   }
 
-  async create(createOrderDto: CreateOrderDto) {
+  async create(createOrderDto: CreateOrderDto, user?: User | null) {
+    const wantsOrderApproval =
+      createOrderDto.adminApproval === true ||
+      createOrderDto.orderItems.some(
+        (oi) =>
+          isApprovedLabel(oi.approvalStatus) || oi.adminApproval === true,
+      );
+    if (wantsOrderApproval) {
+      await assertCanManageApprovals(
+        this.permissionsService,
+        user,
+        'Creating an order with admin or line approval',
+      );
+    }
+
     // Validate required fields
     if (!createOrderDto.customerId) {
       throw new BadRequestException('Customer ID is required');
@@ -837,7 +858,7 @@ export class OrdersService {
     });
   }
 
-  async update(id: string, updateOrderDto: UpdateOrderDto) {
+  async update(id: string, updateOrderDto: UpdateOrderDto, user: User) {
     const { orderItems, paymentTerm, commission, salesPartner, ...orderData } = updateOrderDto;
 
     // Fetch the existing order and related data
@@ -863,6 +884,59 @@ export class OrdersService {
       throw new ConflictException(
         'Delivered orders cannot be modified. Create a remake/replacement or a return/adjustment instead.',
       );
+    }
+
+    if (orderData.adminApproval !== undefined) {
+      const next = Boolean(orderData.adminApproval);
+      const prev = Boolean(existingOrder.adminApproval);
+      if (next !== prev) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'Order admin approval',
+        );
+      }
+    }
+
+    for (const item of orderItems) {
+      if (item.id) {
+        const prevLine = existingOrder.orderItems.find((oi) => oi.id === item.id);
+        if (prevLine) {
+          if (
+            item.approvalStatus !== undefined &&
+            item.approvalStatus !== prevLine.approvalStatus &&
+            (isApprovedLabel(item.approvalStatus) ||
+              isApprovedLabel(prevLine.approvalStatus))
+          ) {
+            await assertCanManageApprovals(
+              this.permissionsService,
+              user,
+              'Order line approval (order update)',
+            );
+          }
+          if (
+            item.adminApproval !== undefined &&
+            item.adminApproval !== prevLine.adminApproval
+          ) {
+            await assertCanManageApprovals(
+              this.permissionsService,
+              user,
+              'Order line admin flag (order update)',
+            );
+          }
+        }
+      } else {
+        if (
+          isApprovedLabel(item.approvalStatus) ||
+          item.adminApproval === true
+        ) {
+          await assertCanManageApprovals(
+            this.permissionsService,
+            user,
+            'New order line with approval on order update',
+          );
+        }
+      }
     }
 
     // Validate missing fields for commission

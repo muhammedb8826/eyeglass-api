@@ -4,6 +4,11 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { ResponseBuilder, SuccessResponse, PaginatedResponse } from '../common';
 import { ResponseInterceptor, PaginatedResponseInterceptor } from '../common';
+import { User } from 'src/entities/user.entity';
+import { Role } from 'src/enums/role.enum';
+
+/** Example-only stand-in for JWT user (not registered as a real controller). */
+const EXAMPLE_ADMIN_USER = { roles: Role.ADMIN } as User;
 
 // Example of how to refactor the OrdersController to use the new response types
 
@@ -15,7 +20,7 @@ export class OrdersControllerExample {
   @Post()
   async create(@Body() createOrderDto: CreateOrderDto): Promise<SuccessResponse<any>> {
     try {
-      const order = await this.ordersService.create(createOrderDto);
+      const order = await this.ordersService.create(createOrderDto, undefined);
       return ResponseBuilder.created(order, 'Order created successfully');
     } catch (error) {
       // Let the global exception filter handle the error formatting
@@ -109,7 +114,11 @@ export class OrdersControllerExample {
     @Param('id') id: string, 
     @Body() updateOrderDto: UpdateOrderDto
   ): Promise<SuccessResponse<any>> {
-    const updatedOrder = await this.ordersService.update(id, updateOrderDto);
+    const updatedOrder = await this.ordersService.update(
+      id,
+      updateOrderDto,
+      EXAMPLE_ADMIN_USER,
+    );
     return ResponseBuilder.updated(updatedOrder, `Order ${id} updated successfully`);
   }
 

@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { RequirePermissions } from 'src/decorators/permissions.decorator';
 import { Permissions } from 'src/permissions/permission.constants';
+import { User } from 'src/entities/user.entity';
 
 @Controller('sales')
 @RequirePermissions(Permissions.SALES_READ)
@@ -12,8 +14,14 @@ export class SalesController {
 
   @Post()
   @RequirePermissions(Permissions.SALES_WRITE)
-  create(@Body() createSaleDto: CreateSaleDto) {
-    return this.salesService.create(createSaleDto);
+  create(
+    @Body() createSaleDto: CreateSaleDto,
+    @Req() req: Request,
+  ) {
+    return this.salesService.create(
+      createSaleDto,
+      req.user as User | undefined,
+    );
   }
 
   @Get()
@@ -35,8 +43,16 @@ export class SalesController {
 
   @Patch(':id')
   @RequirePermissions(Permissions.SALES_WRITE)
-  update(@Param('id') id: string, @Body() updateSaleDto: UpdateSaleDto) {
-    return this.salesService.update(id, updateSaleDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateSaleDto: UpdateSaleDto,
+    @Req() req: Request,
+  ) {
+    return this.salesService.update(
+      id,
+      updateSaleDto,
+      req.user as User,
+    );
   }
 
   @Delete(':id')

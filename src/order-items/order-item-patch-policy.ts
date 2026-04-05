@@ -33,6 +33,9 @@ const SKIP_GENERAL_SCAN = new Set([
   'orderItemNotes',
   'status',
   'qualityControlStatus',
+  /** Handled by assertCanManageApprovals in OrderItemsService (ADMIN / approvals.manage). */
+  'approvalStatus',
+  'adminApproval',
 ]);
 
 export async function assertOrderItemPatchPermissions(

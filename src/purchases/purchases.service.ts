@@ -7,6 +7,11 @@ import { Purchase } from '../entities/purchase.entity';
 import { PurchaseItems } from '../entities/purchase-item.entity';
 import { Vendor } from '../entities/vendor.entity';
 import { User } from '../entities/user.entity';
+import { PermissionsService } from 'src/permissions/permissions.service';
+import {
+  assertCanManageApprovals,
+  isApprovedLabel,
+} from 'src/approvals/approval-authority.util';
 
 @Injectable()
 export class PurchasesService {
@@ -18,12 +23,24 @@ export class PurchasesService {
     @InjectRepository(Vendor)
     private vendorRepository: Repository<Vendor>,
     @InjectRepository(User)
-    private userRepository: Repository<User>
+    private userRepository: Repository<User>,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
-  async create(createPurchaseDto: CreatePurchaseDto) {
+  async create(createPurchaseDto: CreatePurchaseDto, user: User) {
     const { vendorId, purchaserId, ...purchaseData } = createPurchaseDto;
-    
+
+    if (
+      isApprovedLabel(purchaseData.status) ||
+      createPurchaseDto.purchaseItems.some((it) => isApprovedLabel(it.status))
+    ) {
+      await assertCanManageApprovals(
+        this.permissionsService,
+        user,
+        'Purchase create with Approved status',
+      );
+    }
+
     try {
       // Create the purchase
       const purchase = this.purchaseRepository.create({
@@ -158,7 +175,7 @@ export class PurchasesService {
     return purchase;
   }
 
-  async update(id: string, updatePurchaseDto: UpdatePurchaseDto) {
+  async update(id: string, updatePurchaseDto: UpdatePurchaseDto, user: User) {
     const { purchaseItems, ...purchaseData } = updatePurchaseDto;
 
     // Fetch the existing purchase and its items
@@ -169,6 +186,44 @@ export class PurchasesService {
 
     if (!existingPurchase) {
       throw new NotFoundException(`Purchase with ID ${id} not found`);
+    }
+
+    const nextHeaderStatus =
+      purchaseData.status !== undefined
+        ? purchaseData.status
+        : existingPurchase.status;
+    if (
+      isApprovedLabel(nextHeaderStatus) !==
+      isApprovedLabel(existingPurchase.status)
+    ) {
+      await assertCanManageApprovals(
+        this.permissionsService,
+        user,
+        'Purchase header approval status',
+      );
+    }
+
+    for (const item of purchaseItems) {
+      if (item.id) {
+        const prev = existingPurchase.purchaseItems.find((p) => p.id === item.id);
+        if (prev && item.status !== undefined) {
+          if (
+            isApprovedLabel(item.status) !== isApprovedLabel(prev.status)
+          ) {
+            await assertCanManageApprovals(
+              this.permissionsService,
+              user,
+              'Purchase line approval status',
+            );
+          }
+        }
+      } else if (isApprovedLabel(item.status)) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'New purchase line with Approved status',
+        );
+      }
     }
 
     // Extract existing item IDs for comparison

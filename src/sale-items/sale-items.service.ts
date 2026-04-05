@@ -15,6 +15,12 @@ import {
   assertItemVariantLineFields,
   assertSaleRequestedAvailability,
 } from 'src/inventory/item-inventory.util';
+import { User } from 'src/entities/user.entity';
+import { PermissionsService } from 'src/permissions/permissions.service';
+import {
+  assertCanManageApprovals,
+  isApprovedLabel,
+} from 'src/approvals/approval-authority.util';
 
 @Injectable()
 export class SaleItemsService {
@@ -24,9 +30,18 @@ export class SaleItemsService {
     @InjectRepository(OrderItems)
     private readonly orderItemsRepository: Repository<OrderItems>,
     private readonly bincardService: BincardService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
-  async create(createSaleItemDto: CreateSaleItemDto) {
+  async create(createSaleItemDto: CreateSaleItemDto, user: User) {
+    if (isApprovedLabel(createSaleItemDto.status)) {
+      await assertCanManageApprovals(
+        this.permissionsService,
+        user,
+        'Store request line create with Approved status',
+      );
+    }
+
     try {
       const mgr = this.saleItemRepository.manager;
       await assertItemVariantLineFields(
@@ -75,7 +90,7 @@ export class SaleItemsService {
     return saleItems;
   }
 
-  async update(id: string, updateSaleItemDto: UpdateSaleItemDto) {
+  async update(id: string, updateSaleItemDto: UpdateSaleItemDto, user: User) {
     return this.saleItemRepository.manager.transaction(async (manager) => {
       const saleItem = await manager.findOne(SaleItems, {
         where: { id },
@@ -94,6 +109,17 @@ export class SaleItemsService {
       const prevStatus = saleItem.status;
       const newStatus =
         updateSaleItemDto.status !== undefined ? updateSaleItemDto.status : prevStatus;
+
+      if (
+        updateSaleItemDto.status !== undefined &&
+        isApprovedLabel(newStatus) !== isApprovedLabel(prevStatus)
+      ) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'Store request line approval status',
+        );
+      }
       const newUnit =
         updateSaleItemDto.unit !== undefined
           ? parseFloat(updateSaleItemDto.unit.toString())

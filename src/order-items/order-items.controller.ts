@@ -17,8 +17,11 @@ export class OrderItemsController {
 
   @Post()
   @RequirePermissions(Permissions.ORDER_ITEMS_WRITE)
-  async create(@Body() createOrderItemDto: CreateOrderItemDto) {
-    return this.orderItemsService.create(createOrderItemDto);
+  async create(
+    @Body() createOrderItemDto: CreateOrderItemDto,
+    @GetCurrentUser() user: User,
+  ) {
+    return this.orderItemsService.create(createOrderItemDto, user);
   }
 
   @Get('all')

@@ -493,6 +493,7 @@ Codes used by the API (non-exhaustive; `GET /permissions` returns the full catal
 
 - `users.manage` — user CRUD, activate/deactivate, reset password
 - `permissions.manage` — view/edit which permissions each role has (`/permissions/matrix`, `PUT /permissions/roles/...`, etc.)
+- `approvals.manage` — set or revoke **Approved** / admin-approval on **orders** (header + lines), **purchase orders** (header + lines when status label is `Approved`), and **store requests** (`sales` / `sale_items` when status label is `Approved`). **`ADMIN`** can always approve without this row. Automated flows (e.g. QC remake auto-setting a line to approved, auto store requests with status `Requested`) do not require it.
 - `orders.read` / `orders.write`
 - `order_items.read` / `order_items.write`
 - `production.write` — order line status in the lab (**InProgress**, **Ready**, and related transitions)

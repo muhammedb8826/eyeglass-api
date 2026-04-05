@@ -6,6 +6,9 @@ export const Permissions = {
   USERS_MANAGE: 'users.manage',
   PERMISSIONS_MANAGE: 'permissions.manage',
 
+  /** Approve or revoke approval on orders, purchase orders, and store requests (sales). */
+  APPROVALS_MANAGE: 'approvals.manage',
+
   ORDERS_READ: 'orders.read',
   ORDERS_WRITE: 'orders.write',
 

@@ -9,7 +9,13 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { Sale } from 'src/entities/sale.entity';
 import { Item } from 'src/entities/item.entity';
+import { User } from 'src/entities/user.entity';
 import { randomUUID } from 'crypto';
+import { PermissionsService } from 'src/permissions/permissions.service';
+import {
+  assertCanManageApprovals,
+  isApprovedLabel,
+} from 'src/approvals/approval-authority.util';
 
 @Injectable()
 export class SalesService {
@@ -18,10 +24,22 @@ export class SalesService {
     private readonly saleRepository: Repository<Sale>,
     @InjectRepository(Item)
     private readonly itemRepository: Repository<Item>,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
-  async create(createSaleDto: CreateSaleDto) {
+  async create(createSaleDto: CreateSaleDto, user?: User | null) {
     const { saleItems, ...saleData } = createSaleDto;
+
+    if (
+      isApprovedLabel(saleData.status) ||
+      saleItems.some((it) => isApprovedLabel(it.status))
+    ) {
+      await assertCanManageApprovals(
+        this.permissionsService,
+        user,
+        'Store request (sale) create with Approved status',
+      );
+    }
 
     try {
       const mgr = this.itemRepository.manager;
@@ -120,7 +138,7 @@ export class SalesService {
     });
   }
 
-  async update(id: string, updateSaleDto: UpdateSaleDto) {
+  async update(id: string, updateSaleDto: UpdateSaleDto, user: User) {
     const { saleItems, ...saleData } = updateSaleDto;
 
     // Fetch the existing sale and its items
@@ -131,6 +149,42 @@ export class SalesService {
 
     if (!existingSale) {
       throw new NotFoundException(`Sale with ID ${id} not found`);
+    }
+
+    if (saleData.status !== undefined) {
+      if (
+        isApprovedLabel(saleData.status) !==
+        isApprovedLabel(existingSale.status)
+      ) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'Store request (sale) header approval status',
+        );
+      }
+    }
+
+    for (const item of saleItems) {
+      if (item.id) {
+        const prev = existingSale.saleItems.find((si) => si.id === item.id);
+        if (prev && item.status !== undefined) {
+          if (
+            isApprovedLabel(item.status) !== isApprovedLabel(prev.status)
+          ) {
+            await assertCanManageApprovals(
+              this.permissionsService,
+              user,
+              'Store request (sale) line approval status',
+            );
+          }
+        }
+      } else if (isApprovedLabel(item.status)) {
+        await assertCanManageApprovals(
+          this.permissionsService,
+          user,
+          'New store request line with Approved status',
+        );
+      }
     }
 
     // Extract existing item IDs for comparison
