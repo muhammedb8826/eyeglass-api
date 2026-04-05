@@ -236,35 +236,57 @@ You can display them in Rx detail views, job tickets, and production UIs.
 
 ### 4.4 Lab tools – automatic check from Rx + base
 
-For items that have **bases** (see §5.2) and a prescription on the order item, the backend automatically checks that the lab has the right **tool blocks** before it accepts the order.
+For items that have **bases** (see §5.2) and a prescription on the order item, the backend checks that the lab has the right **tool blocks** (integer curve codes on the same scale as your `lab-tools` inventory).
 
-For each order item with:
+#### Two different “add” concepts (do not mix them)
 
-- a chosen `itemBaseId` (e.g. 350+25, 575+25, 400+25, 800+75), and
-- Rx fields (`sphereRight/Left`, `cylinderRight/Left`),
+| Field | Where | Meaning |
+|--------|--------|--------|
+| **Stock / blank add** | `ItemBase.addPower` | Diopters of add **on the lens SKU** (e.g. `2.5` for a `350^+25` / `575^+25` style blank). Used **only** in the formula below as `round(addPower × 10)` on the tool scale. |
+| **Patient reading add** | `addRight` / `addLeft` on the order line | The Rx **ADD** for progressive/near (e.g. +3.25 D). **Not** used today for this distance-style tool check. |
 
-the backend computes tool values as:
+So: **item code + base curve + blank add** = which `itemBaseId` row you pick; **patient ADD** = separate Rx fields for the job ticket / lens design, not folded into these tool integers unless you extend the product later.
 
-- Right eye  
-  - `R_SPH_val = Base + R_SPH`  
-  - `R_CYL_val = R_SPH_val + R_CYL`
-- Left eye  
-  - `L_SPH_val = Base + L_SPH`  
-  - `L_CYL_val = L_SPH_val + L_CYL`
+#### Formula (matches the backend — supplier **tool integers**, not “base 3.50 D” algebra)
 
-Where:
+Let:
 
-- **Base** comes from `ItemBase.baseCode` (e.g. `"350"` → 3.50 D).  
-- SPH / CYL are in diopters as sent in the Rx fields.
+- `baseCodeNum` = `parseFloat(ItemBase.baseCode)` (e.g. `"350"` → **350**, `"575"` → **575** on the tool scale).
+- `addTool` = `round(ItemBase.addPower × 10)` (e.g. 2.5 D → **25**).
+- **`baseTool` = `baseCodeNum + addTool`** (e.g. 350 + 25 = **375** for `350^+2.5`; 575 + 25 = **600** for `575^+2.5`).
 
-These four values (where present) are converted to the **tool scale** (100× diopters, e.g. 1.25 D → 125) and checked against the `lab-tools` table. If **any** value has no matching lab tool (range) with `quantity > 0`, the order **POST/PATCH** fails with:
+Per eye (only if that eye has quantity &gt; 0), using `sphere` / `cylinder` for that side:
+
+1. **Sphere magnitude on tool scale**  
+   - If `|sphere|` is an integer between 0 and 4000, it is used **as-is** (e.g. legacy “centi-diopter” style **75** = 0.75 D).  
+   - Otherwise `|sphere|` is treated as **diopters** and scaled with `round(|sphere| × 100)` (e.g. **0.75** → **75**).
+
+2. **Sphere tool** `sphTool` (start from `baseTool`):  
+   - `sphere < 0` → `sphTool = baseTool + sphMag`  
+   - `sphere > 0` → `sphTool = baseTool - sphMag`  
+   - `sphere === 0` → `sphTool = baseTool`
+
+3. **Cylinder** on tool scale:  
+   - If `|cyl|` is an integer ≥ 25 and a multiple of 25, use **as-is** (e.g. **325** = 3.25 D on this scale).  
+   - Else `round(|cyl| × 100)` (e.g. **3.25** → **325**).
+
+4. **Cylinder tool** `cylTool = sphTool + cylMag`.
+
+Both `sphTool` and `cylTool` (when cylinder is present) are required to exist in stock in `lab-tools`.
+
+**Example** (matches a common chart): `itemBase` **350^+2.5** → `baseTool = 375`.  
+Rx R: SPH −0.75, CYL 3.25 (sent as **325** or **3.25**); L: SPH 0, CYL 3.25:
+
+- R: `sphTool` = 375 + 75 = **450**, `cylTool` = 450 + 325 = **775**
+- L: `sphTool` = **375**, `cylTool` = 375 + 325 = **700**
+
+If you instead select **`575^+2.5`**, `baseTool` becomes **600**, so the same Rx yields **675** and **1000** — not 450/775 and 375/700. The API is consistent; the **chosen `itemBaseId`** must match the curve family your lab tools and paperwork use.
+
+If **any** computed value has no matching lab tool (range) with `quantity > 0`, the order **POST/PATCH** fails with:
 
 > `Cannot produce order: no lab tool available for calculated base/tool value(s) ...`
 
-The frontend **does not need to send any extra fields** for this check:
-
-- Just send `itemId`, optional `itemBaseId`, and Rx (SPH/CYL).  
-- The backend does the Rx + base calculation and tool validation automatically.
+The frontend **does not** send separate tool numbers: send `itemId`, `itemBaseId`, and Rx (`sphere*` / `cylinder*`). Use **`quantityRight` / `quantityLeft`** so only eyes that are actually being produced are validated (see backend `ensureLabToolsAvailableForOrderItems`).
 
 ---
 

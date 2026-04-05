@@ -89,7 +89,9 @@ export class OrdersService {
 
   /**
    * Validates that all order items with itemBaseId and Rx have lab tools available for the
-   * tool values derived from Rx + base. Only checks the eye(s) being produced (quantityRight > 0, quantityLeft > 0).
+   * tool values derived from Rx + ItemBase (baseCode as tool integer + blank add as round(addPower×10)).
+   * Order-line addRight/addLeft (patient ADD) are intentionally not used here — distance tool chart only.
+   * Only checks eyes with quantityRight / quantityLeft > 0.
    * Public so OrderItemsService can call it after PATCH order-items/:id.
    */
   async ensureLabToolsAvailableForOrderItems(orderItems: OrderItems[]): Promise<void> {

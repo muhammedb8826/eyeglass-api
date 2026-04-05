@@ -65,9 +65,11 @@ export class OrderItems {
   @Column('float', { nullable: true })
   prismLeft: number;
 
+  /** Patient reading add (Rx ADD), diopters — not the same as ItemBase.addPower (blank stock +add on the SKU). */
   @Column('float', { nullable: true })
   addRight: number;
 
+  /** See addRight. Lab tool auto-check uses ItemBase + sphere/cylinder only, not these fields. */
   @Column('float', { nullable: true })
   addLeft: number;
 
