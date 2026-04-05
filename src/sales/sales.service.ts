@@ -18,6 +18,7 @@ import {
   isApprovedLabel,
   isSaleItemStockIssueTransition,
 } from 'src/approvals/approval-authority.util';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class SalesService {
@@ -27,6 +28,7 @@ export class SalesService {
     @InjectRepository(Item)
     private readonly itemRepository: Repository<Item>,
     private readonly permissionsService: PermissionsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createSaleDto: CreateSaleDto, user?: User | null) {
@@ -96,11 +98,23 @@ export class SalesService {
         .values(saleItemsToCreate)
         .execute();
 
-      // Return the complete sale with items
-      return await this.saleRepository.findOne({
+      const created = await this.saleRepository.findOne({
         where: { id: savedSale.id },
         relations: ['saleItems', 'operator'],
       });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'STORE_REQUEST',
+        title: `Store request created (${saleData.series})`,
+        message: `Status ${saleData.status}. ${saleItems.length} line(s).`,
+        data: {
+          saleId: savedSale.id,
+          series: saleData.series,
+          status: saleData.status,
+          operatorId: saleData.operatorId ?? null,
+          lineCount: saleItems.length,
+        },
+      });
+      return created;
     } catch (error) {
       console.error("Error creating sale:", error);
 
@@ -289,6 +303,42 @@ export class SalesService {
             })
             .execute();
         }
+      }
+
+      const changes: string[] = [];
+      if (
+        saleData.status !== undefined &&
+        saleData.status !== existingSale.status
+      ) {
+        changes.push(
+          `Header status: ${existingSale.status} → ${saleData.status}`,
+        );
+      }
+      for (const item of saleItems) {
+        if (!item.id) {
+          changes.push(`New line (item ${item.itemId}, status ${item.status})`);
+          continue;
+        }
+        const prev = existingSale.saleItems.find((si) => si.id === item.id);
+        if (!prev) continue;
+        if (item.status !== undefined && item.status !== prev.status) {
+          changes.push(`Line ${item.id} status: ${prev.status} → ${item.status}`);
+        }
+      }
+      if (itemsToDelete.length > 0) {
+        changes.push(`${itemsToDelete.length} line(s) removed`);
+      }
+      if (changes.length > 0) {
+        await this.notificationsService.notifyAllActiveUsers({
+          type: 'STORE_REQUEST',
+          title: `Store request ${existingSale.series} updated`,
+          message: changes.join('\n'),
+          data: {
+            saleId: id,
+            series: existingSale.series,
+            changes,
+          },
+        });
       }
 
       // Return the updated sale

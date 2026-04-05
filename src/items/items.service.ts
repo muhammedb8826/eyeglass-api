@@ -8,6 +8,7 @@ import { UpdateItemDto } from './dto/update-item.dto';
 import { Item } from '../entities/item.entity';
 import { ItemBase } from '../entities/item-base.entity';
 import { Pricing } from '../entities/pricing.entity';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class ItemsService {
@@ -18,6 +19,7 @@ export class ItemsService {
     private itemBaseRepository: Repository<ItemBase>,
     @InjectRepository(Pricing)
     private pricingRepository: Repository<Pricing>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createItemDto: CreateItemDto) {
@@ -49,7 +51,14 @@ export class ItemsService {
         unitCategoryId: createItemDto.unitCategoryId,
       });
 
-      return await this.itemRepository.save(item);
+      const saved = await this.itemRepository.save(item);
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'INVENTORY',
+        title: `Item created: ${saved.name}`,
+        message: saved.itemCode ? `Code ${saved.itemCode}` : undefined,
+        data: { itemId: saved.id, name: saved.name, itemCode: saved.itemCode },
+      });
+      return saved;
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
         throw new ConflictException('An item with this name already exists.');
@@ -143,6 +152,21 @@ export class ItemsService {
     });
     const saved = await this.itemBaseRepository.save(base);
     await this.syncParentQuantityFromBases(itemId);
+    const parent = await this.itemRepository.findOne({
+      where: { id: itemId },
+      select: ['id', 'name'],
+    });
+    await this.notificationsService.notifyAllActiveUsers({
+      type: 'INVENTORY',
+      title: `Item variant added: ${parent?.name ?? itemId}`,
+      message: `Base ${saved.baseCode}, add ${saved.addPower}`,
+      data: {
+        itemId,
+        itemBaseId: saved.id,
+        baseCode: saved.baseCode,
+        addPower: saved.addPower,
+      },
+    });
     return saved;
   }
 
@@ -190,6 +214,21 @@ export class ItemsService {
     }
     const saved = await this.itemBaseRepository.save(base);
     await this.syncParentQuantityFromBases(itemId);
+    const parent = await this.itemRepository.findOne({
+      where: { id: itemId },
+      select: ['id', 'name'],
+    });
+    await this.notificationsService.notifyAllActiveUsers({
+      type: 'INVENTORY',
+      title: `Item variant updated: ${parent?.name ?? itemId}`,
+      message: `Base ${saved.baseCode}, add ${saved.addPower}`,
+      data: {
+        itemId,
+        itemBaseId: saved.id,
+        baseCode: saved.baseCode,
+        addPower: saved.addPower,
+      },
+    });
     return saved;
   }
 
@@ -204,8 +243,23 @@ export class ItemsService {
         'Cannot delete a variant that still has on-hand quantity; adjust stock to zero first.',
       );
     }
+    const parent = await this.itemRepository.findOne({
+      where: { id: itemId },
+      select: ['id', 'name'],
+    });
     await this.itemBaseRepository.delete(baseId);
     await this.syncParentQuantityFromBases(itemId);
+    await this.notificationsService.notifyAllActiveUsers({
+      type: 'INVENTORY',
+      title: `Item variant removed: ${parent?.name ?? itemId}`,
+      message: `Removed base ${base.baseCode}, add ${base.addPower}`,
+      data: {
+        itemId,
+        itemBaseId: baseId,
+        baseCode: base.baseCode,
+        addPower: base.addPower,
+      },
+    });
   }
 
   /**
@@ -264,7 +318,14 @@ export class ItemsService {
   
     try {
       await this.itemRepository.update(id, updateData);
-      return this.findOne(id);
+      const updated = await this.findOne(id);
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'INVENTORY',
+        title: `Item updated: ${updated.name}`,
+        message: 'Catalog / master data change.',
+        data: { itemId: id, name: updated.name },
+      });
+      return updated;
     } catch (error) {
       if (error.code === 'ER_DUP_ENTRY') {
         throw new ConflictException('Unique constraint failed. Please check your data.');
@@ -286,7 +347,13 @@ export class ItemsService {
     }
   
     try {
-      return await this.itemRepository.remove(item);
+      const removed = await this.itemRepository.remove(item);
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'INVENTORY',
+        title: `Item deleted: ${item.name}`,
+        data: { itemId: id, name: item.name },
+      });
+      return removed;
     } catch (error) {
       if (error.code === 'ER_ROW_IS_REFERENCED_2') {
         throw new BadRequestException('Cannot delete item due to existing dependencies. Please remove associated data first.');

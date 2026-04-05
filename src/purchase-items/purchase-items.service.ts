@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CreatePurchaseItemDto } from './dto/create-purchase-item.dto';
 import { UpdatePurchaseItemDto } from './dto/update-purchase-item.dto';
 import { PurchaseItems } from 'src/entities/purchase-item.entity';
+import { Purchase } from 'src/entities/purchase.entity';
 import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
 import {
   applyInventoryDelta,
@@ -15,6 +16,7 @@ import {
 } from 'src/approvals/approval-authority.util';
 import { User } from 'src/entities/user.entity';
 import { PermissionsService } from 'src/permissions/permissions.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class PurchaseItemsService {
@@ -23,6 +25,7 @@ export class PurchaseItemsService {
     private purchaseItemRepository: Repository<PurchaseItems>,
     private readonly bincardService: BincardService,
     private readonly permissionsService: PermissionsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private async findDuplicateLine(
@@ -84,7 +87,23 @@ export class PurchaseItemsService {
         status: createPurchaseItemDto.status,
       });
 
-      return await this.purchaseItemRepository.save(purchaseItem);
+      const saved = await this.purchaseItemRepository.save(purchaseItem);
+      const po = await this.purchaseItemRepository.manager.findOne(Purchase, {
+        where: { id: createPurchaseItemDto.purchaseId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'PURCHASE',
+        title: `Purchase line added (${po?.series ?? createPurchaseItemDto.purchaseId})`,
+        message: `Status: ${saved.status}.`,
+        data: {
+          purchaseId: createPurchaseItemDto.purchaseId,
+          purchaseItemId: saved.id,
+          series: po?.series,
+          status: saved.status,
+        },
+      });
+      return saved;
     } catch (error) {
       console.error('Error creating purchase item:', error);
 
@@ -162,7 +181,15 @@ export class PurchaseItemsService {
   }
 
   async update(id: string, updatePurchaseItemDto: UpdatePurchaseItemDto, user: User) {
-    return this.purchaseItemRepository.manager.transaction(async (manager) => {
+    let notifyMeta: {
+      purchaseId: string;
+      lineId: string;
+      prevStatus: string;
+      newStatus: string;
+      changed: boolean;
+    } | null = null;
+
+    const result = await this.purchaseItemRepository.manager.transaction(async (manager) => {
       const purchaseItem = await manager.findOne(PurchaseItems, {
         where: { id },
         relations: { item: true },
@@ -253,19 +280,62 @@ export class PurchaseItemsService {
 
       await manager.save(PurchaseItems, purchaseItem);
 
+      notifyMeta = {
+        purchaseId: purchaseItem.purchaseId,
+        lineId: id,
+        prevStatus,
+        newStatus,
+        changed:
+          updatePurchaseItemDto.status !== undefined &&
+          prevStatus !== newStatus,
+      };
+
       return manager.findOne(PurchaseItems, {
         where: { id },
         relations: { purchaseItemNotes: true, itemBase: true },
       });
     });
+
+    if (notifyMeta?.changed) {
+      const po = await this.purchaseItemRepository.manager.findOne(Purchase, {
+        where: { id: notifyMeta.purchaseId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'PURCHASE',
+        title: `Purchase line updated (${po?.series ?? notifyMeta.purchaseId})`,
+        message: `Line status: ${notifyMeta.prevStatus} → ${notifyMeta.newStatus}.`,
+        data: {
+          purchaseId: notifyMeta.purchaseId,
+          purchaseItemId: notifyMeta.lineId,
+          series: po?.series,
+          previousStatus: notifyMeta.prevStatus,
+          status: notifyMeta.newStatus,
+        },
+      });
+    }
+
+    return result;
   }
 
   async remove(id: string, user: User) {
-    return this.purchaseItemRepository.manager.transaction(async (manager) => {
+    let removedMeta: {
+      purchaseId: string;
+      lineId: string;
+      status: string;
+    } | null = null;
+
+    const removed = await this.purchaseItemRepository.manager.transaction(async (manager) => {
       const purchaseItem = await manager.findOne(PurchaseItems, { where: { id } });
       if (!purchaseItem) {
         throw new NotFoundException(`Purchase Item with ID ${id} not found`);
       }
+
+      removedMeta = {
+        purchaseId: purchaseItem.purchaseId,
+        lineId: id,
+        status: purchaseItem.status,
+      };
 
       if (purchaseItem.status === 'Received') {
         await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
@@ -291,5 +361,25 @@ export class PurchaseItemsService {
 
       return manager.remove(PurchaseItems, purchaseItem);
     });
+
+    if (removedMeta) {
+      const po = await this.purchaseItemRepository.manager.findOne(Purchase, {
+        where: { id: removedMeta.purchaseId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'PURCHASE',
+        title: `Purchase line removed (${po?.series ?? removedMeta.purchaseId})`,
+        message: `Removed line was status "${removedMeta.status}".`,
+        data: {
+          purchaseId: removedMeta.purchaseId,
+          purchaseItemId: removedMeta.lineId,
+          series: po?.series,
+          status: removedMeta.status,
+        },
+      });
+    }
+
+    return removed;
   }
 }

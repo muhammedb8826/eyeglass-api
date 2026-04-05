@@ -5,11 +5,13 @@ import { PurchaseItemsController } from './purchase-items.controller';
 import { PurchaseItems } from 'src/entities/purchase-item.entity';
 import { PurchaseItemNote } from 'src/entities/purchase-item-note.entity';
 import { BincardModule } from 'src/bincard/bincard.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([PurchaseItems, PurchaseItemNote]),
     BincardModule,
+    NotificationsModule,
   ],
   controllers: [PurchaseItemsController],
   providers: [PurchaseItemsService],

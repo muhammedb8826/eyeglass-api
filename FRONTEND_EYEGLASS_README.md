@@ -656,7 +656,13 @@ Returns:
 
 ### 9.6 Notifications emitted by the backend (current)
 
-- **User activation/deactivation**
-  - When an admin activates or deactivates a user, the target user receives a `SECURITY` notification.
-- **Store request created**
-  - When an order item triggers an automatic store request, the assigned `operatorId` receives a `STORE_REQUEST` notification.
+For workflow visibility, many events **fan out to every active user** (`is_active: true`): each user gets their own row in `notifications` (same title/message/`data`, different `recipientId`). The UI can filter by `type` and use `data` for deep links.
+
+- **`SECURITY`** — Admin activates or deactivates a user: **only that user** receives the notification.
+- **`ORDER`** — Order **created** (`POST /orders`); order **updated** (`PATCH /orders/:id`) when header status, admin approval, or any nested line status / approval / QC / store-request fields change, or lines are added/removed; **order line** **created** or **updated** (`POST/PATCH /order-items`) when workflow fields change (status, approval, QC, store request, QC-fail remake).
+- **`QC`** — Same fan-out as `ORDER` when a line is reset for **QC failure / remake** (distinct type for filtering).
+- **`STORE_REQUEST`** — Store request (sale) **created** (`POST /sales`, including automatic creation from an order line); sale **updated** (`PATCH /sales/:id`) when header or line statuses change or lines are removed; **sale line** **created**, **updated** (status change), or **deleted** (`POST/PATCH/DELETE /sale-items`).
+- **`PURCHASE`** — Purchase **created** (`POST /purchases`); **updated** (`PATCH /purchases/:id`) when header status or line statuses change or lines are removed; **purchase line** **created**, **updated** (status change), or **deleted** (`POST/PATCH/DELETE /purchase-items`).
+- **`INVENTORY`** — Item **created/updated/deleted**; item **base (variant) added/updated/deleted** (`items` / item-bases endpoints).
+
+**Note:** A single user action can produce **more than one** notification (e.g. bulk `PATCH /orders` plus later `PATCH /order-items`). Use `data.orderId`, `data.saleId`, `data.purchaseId`, etc., to group or dedupe in the client if needed.

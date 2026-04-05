@@ -60,12 +60,30 @@ export class OrderItemsService {
       const orderItemData = { ...createOrderItemDto } as any;
       delete orderItemData.orderItemNotes;
       const orderItem = this.orderItemsRepository.create(orderItemData);
-      const createdOrderItem = await queryRunner.manager.save(OrderItems, orderItem);
+      const savedOi = await queryRunner.manager.save(orderItem);
+      const createdOrderItem = Array.isArray(savedOi) ? savedOi[0] : savedOi;
 
       // Update order status based on all order items
       await this.updateOrderStatus(createOrderItemDto.orderId, queryRunner);
 
       await queryRunner.commitTransaction();
+
+      const ordMeta = await this.orderRepository.findOne({
+        where: { id: createOrderItemDto.orderId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'ORDER',
+        title: `New order line (${ordMeta?.series ?? createOrderItemDto.orderId})`,
+        message: `Item line added; status ${createOrderItemDto.status ?? 'Pending'}.`,
+        data: {
+          orderId: createOrderItemDto.orderId,
+          orderItemId: createdOrderItem.id,
+          series: ordMeta?.series,
+          status: createOrderItemDto.status,
+        },
+      });
+
       return createdOrderItem;
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -503,6 +521,61 @@ export class OrderItemsService {
 
       await queryRunner.commitTransaction();
 
+      const workflowChanged =
+        nextStatus !== currentOrderItem.status ||
+        nextApprovalStatus !== currentOrderItem.approvalStatus ||
+        newQualityControlStatus !== currentOrderItem.qualityControlStatus ||
+        nextStoreRequestStatus !== currentOrderItem.storeRequestStatus ||
+        qcFailureRemake;
+
+      if (workflowChanged) {
+        const ordMeta = await this.orderRepository.findOne({
+          where: { id: effectiveOrderId },
+          select: ['id', 'series'],
+        });
+        const parts: string[] = [];
+        if (nextStatus !== currentOrderItem.status) {
+          parts.push(`status ${currentOrderItem.status} → ${nextStatus}`);
+        }
+        if (nextApprovalStatus !== currentOrderItem.approvalStatus) {
+          parts.push(`approval ${currentOrderItem.approvalStatus} → ${nextApprovalStatus}`);
+        }
+        if (newQualityControlStatus !== currentOrderItem.qualityControlStatus) {
+          parts.push(`QC ${currentOrderItem.qualityControlStatus} → ${newQualityControlStatus}`);
+        }
+        if (nextStoreRequestStatus !== currentOrderItem.storeRequestStatus) {
+          parts.push(`store request ${currentOrderItem.storeRequestStatus} → ${nextStoreRequestStatus}`);
+        }
+        if (qcFailureRemake) {
+          parts.push('QC failed — line reset for remake');
+        }
+        await this.notificationsService.notifyAllActiveUsers({
+          type: qcFailureRemake ? 'QC' : 'ORDER',
+          title: qcFailureRemake
+            ? `QC failed — order ${ordMeta?.series ?? effectiveOrderId}`
+            : `Order line updated (${ordMeta?.series ?? effectiveOrderId})`,
+          message: parts.join('; '),
+          data: {
+            orderId: effectiveOrderId,
+            orderItemId: id,
+            series: ordMeta?.series,
+            previous: {
+              status: currentOrderItem.status,
+              approvalStatus: currentOrderItem.approvalStatus,
+              qualityControlStatus: currentOrderItem.qualityControlStatus,
+              storeRequestStatus: currentOrderItem.storeRequestStatus,
+            },
+            current: {
+              status: nextStatus,
+              approvalStatus: nextApprovalStatus,
+              qualityControlStatus: newQualityControlStatus,
+              storeRequestStatus: nextStoreRequestStatus,
+            },
+            qcFailureRemake,
+          },
+        });
+      }
+
       return await this.orderItemsRepository.findOne({
         where: { id },
         relations: ['order', 'item', 'itemBase', 'service', 'pricing', 'uom'],
@@ -603,16 +676,7 @@ export class OrderItemsService {
     };
 
     await this.salesService.create(saleDto);
-    // Notify the operator/store user who was assigned to handle the request
-    if (dto.operatorId) {
-      await this.notificationsService.notify({
-        recipientId: dto.operatorId as string,
-        type: 'STORE_REQUEST',
-        title: 'New store request created',
-        message: `Store request ${series} was created for order ${baseSeries}.`,
-        data: { saleSeries: series, orderId: order?.id ?? orderItem.orderId, orderItemId: orderItem.id },
-      });
-    }
+    // STORE_REQUEST fan-out is emitted inside SalesService.create
   }
 
   private async updateOrderStatus(orderId: string, queryRunner?: any) {

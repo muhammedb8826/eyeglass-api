@@ -6,9 +6,13 @@ import { Item } from '../entities/item.entity';
 import { ItemBase } from '../entities/item-base.entity';
 import { Machine } from '../entities/machine.entity';
 import { Pricing } from '../entities/pricing.entity';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Item, ItemBase, Machine, Pricing])],
+  imports: [
+    TypeOrmModule.forFeature([Item, ItemBase, Machine, Pricing]),
+    NotificationsModule,
+  ],
   controllers: [ItemsController],
   providers: [ItemsService],
   exports: [ItemsService],

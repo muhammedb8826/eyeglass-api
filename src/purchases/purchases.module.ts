@@ -6,9 +6,13 @@ import { Purchase } from 'src/entities/purchase.entity';
 import { Vendor } from 'src/entities/vendor.entity';
 import { User } from 'src/entities/user.entity';
 import { PurchaseItems } from 'src/entities/purchase-item.entity';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Purchase, PurchaseItems, Vendor, User])],
+  imports: [
+    TypeOrmModule.forFeature([Purchase, PurchaseItems, Vendor, User]),
+    NotificationsModule,
+  ],
   controllers: [PurchasesController],
   providers: [PurchasesService],
   exports: [PurchasesService],

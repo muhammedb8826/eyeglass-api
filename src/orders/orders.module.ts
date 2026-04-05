@@ -15,10 +15,12 @@ import { ItemBase } from 'src/entities/item-base.entity';
 import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolModule } from 'src/lab-tool/lab-tool.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     LabToolModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([
       Order, 
       Pricing, 

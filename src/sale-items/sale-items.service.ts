@@ -10,6 +10,8 @@ import { UpdateSaleItemDto } from './dto/update-sale-item.dto';
 import { SaleItems } from 'src/entities/sale-item.entity';
 import { BincardService, RecordBincardMovementDto } from 'src/bincard/bincard.service';
 import { OrderItems } from 'src/entities/order-item.entity';
+import { Sale } from 'src/entities/sale.entity';
+import { NotificationsService } from 'src/notifications/notifications.service';
 import {
   applyInventoryDelta,
   assertItemVariantLineFields,
@@ -33,6 +35,7 @@ export class SaleItemsService {
     private readonly orderItemsRepository: Repository<OrderItems>,
     private readonly bincardService: BincardService,
     private readonly permissionsService: PermissionsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createSaleItemDto: CreateSaleItemDto, user: User) {
@@ -75,7 +78,23 @@ export class SaleItemsService {
         status: createSaleItemDto.status,
       });
 
-      return await this.saleItemRepository.save(saleItem);
+      const saved = await this.saleItemRepository.save(saleItem);
+      const sale = await mgr.findOne(Sale, {
+        where: { id: saved.saleId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'STORE_REQUEST',
+        title: `Store request line added (${sale?.series ?? saved.saleId})`,
+        message: `Status: ${saved.status}.`,
+        data: {
+          saleId: saved.saleId,
+          saleItemId: saved.id,
+          series: sale?.series,
+          status: saved.status,
+        },
+      });
+      return saved;
     } catch (error) {
       console.error('Error creating Sale Item:', error);
 
@@ -96,7 +115,15 @@ export class SaleItemsService {
   }
 
   async update(id: string, updateSaleItemDto: UpdateSaleItemDto, user: User) {
-    return this.saleItemRepository.manager.transaction(async (manager) => {
+    let notifyMeta: {
+      saleId: string;
+      lineId: string;
+      prevStatus: string;
+      newStatus: string;
+      changed: boolean;
+    } | null = null;
+
+    const updatedSaleItem = await this.saleItemRepository.manager.transaction(async (manager) => {
       const saleItem = await manager.findOne(SaleItems, {
         where: { id },
         relations: ['item'],
@@ -176,7 +203,16 @@ export class SaleItemsService {
       }
       saleItem.status = newStatus;
       saleItem.unit = newUnit;
-      const updatedSaleItem = await manager.save(SaleItems, saleItem);
+      const savedLine = await manager.save(SaleItems, saleItem);
+
+      notifyMeta = {
+        saleId: saleItem.saleId,
+        lineId: id,
+        prevStatus,
+        newStatus,
+        changed:
+          updateSaleItemDto.status !== undefined && prevStatus !== newStatus,
+      };
 
       if (stockDelta !== 0) {
         const movement: RecordBincardMovementDto = {
@@ -213,12 +249,39 @@ export class SaleItemsService {
         }
       }
 
-      return updatedSaleItem;
+      return savedLine;
     });
+
+    if (notifyMeta?.changed) {
+      const sale = await this.saleItemRepository.manager.findOne(Sale, {
+        where: { id: notifyMeta.saleId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'STORE_REQUEST',
+        title: `Store request line updated (${sale?.series ?? notifyMeta.saleId})`,
+        message: `Line status: ${notifyMeta.prevStatus} → ${notifyMeta.newStatus}.`,
+        data: {
+          saleId: notifyMeta.saleId,
+          saleItemId: notifyMeta.lineId,
+          series: sale?.series,
+          previousStatus: notifyMeta.prevStatus,
+          status: notifyMeta.newStatus,
+        },
+      });
+    }
+
+    return updatedSaleItem;
   }
 
   async remove(id: string, user: User) {
-    return this.saleItemRepository.manager.transaction(async (manager) => {
+    let removedMeta: {
+      saleId: string;
+      lineId: string;
+      status: string;
+    } | null = null;
+
+    const removed = await this.saleItemRepository.manager.transaction(async (manager) => {
       const saleItem = await manager.findOne(SaleItems, {
         where: { id },
         relations: ['item'],
@@ -227,6 +290,12 @@ export class SaleItemsService {
       if (!saleItem) {
         throw new NotFoundException(`Sale Item with ID ${id} not found`);
       }
+
+      removedMeta = {
+        saleId: saleItem.saleId,
+        lineId: id,
+        status: saleItem.status,
+      };
 
       if (saleItem.status === 'Stocked-out') {
         await assertCanPerformStoreStockIssue(this.permissionsService, user);
@@ -252,5 +321,25 @@ export class SaleItemsService {
 
       return manager.remove(SaleItems, saleItem);
     });
+
+    if (removedMeta) {
+      const sale = await this.saleItemRepository.manager.findOne(Sale, {
+        where: { id: removedMeta.saleId },
+        select: ['id', 'series'],
+      });
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'STORE_REQUEST',
+        title: `Store request line removed (${sale?.series ?? removedMeta.saleId})`,
+        message: `Removed line was status "${removedMeta.status}".`,
+        data: {
+          saleId: removedMeta.saleId,
+          saleItemId: removedMeta.lineId,
+          series: sale?.series,
+          status: removedMeta.status,
+        },
+      });
+    }
+
+    return removed;
   }
 }

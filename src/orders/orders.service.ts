@@ -32,6 +32,7 @@ import {
   resolveOrderDateFilter,
   ResolvedOrderDateFilter,
 } from './utils/order-list-filters.util';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 export type OrderListQueryInput = {
   search?: string;
@@ -83,6 +84,7 @@ export class OrdersService {
     private readonly dataSource: DataSource,
     private readonly labToolService: LabToolService,
     private readonly permissionsService: PermissionsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -505,6 +507,18 @@ export class OrdersService {
       }
 
       await queryRunner.commitTransaction();
+
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'ORDER',
+        title: `Order created: ${createOrderDto.series}`,
+        message: `Status ${createOrderDto.status}. ${createOrderDto.orderItems.length} line(s).`,
+        data: {
+          orderId: savedOrder.id,
+          series: createOrderDto.series,
+          status: createOrderDto.status,
+          lineCount: createOrderDto.orderItems.length,
+        },
+      });
 
       // Return the complete order with all relations
       return await this.orderRepository.findOne({
@@ -1308,6 +1322,72 @@ export class OrdersService {
       }
 
       await queryRunner.commitTransaction();
+
+      const changes: string[] = [];
+      if (
+        orderData.status !== undefined &&
+        orderData.status !== existingOrder.status
+      ) {
+        changes.push(`Order status: ${existingOrder.status} → ${orderData.status}`);
+      }
+      if (
+        orderData.adminApproval !== undefined &&
+        Boolean(orderData.adminApproval) !== Boolean(existingOrder.adminApproval)
+      ) {
+        changes.push(
+          `Order admin approval: ${existingOrder.adminApproval} → ${orderData.adminApproval}`,
+        );
+      }
+      for (const item of orderItems) {
+        if (!item.id) {
+          changes.push(`New order line (item ${item.itemId})`);
+          continue;
+        }
+        const prevLine = existingOrder.orderItems.find((oi) => oi.id === item.id);
+        if (!prevLine) continue;
+        if (item.status !== undefined && item.status !== prevLine.status) {
+          changes.push(`Line ${item.id} status: ${prevLine.status} → ${item.status}`);
+        }
+        if (
+          item.approvalStatus !== undefined &&
+          item.approvalStatus !== prevLine.approvalStatus
+        ) {
+          changes.push(
+            `Line ${item.id} approval: ${prevLine.approvalStatus} → ${item.approvalStatus}`,
+          );
+        }
+        if (
+          item.qualityControlStatus !== undefined &&
+          item.qualityControlStatus !== prevLine.qualityControlStatus
+        ) {
+          changes.push(
+            `Line ${item.id} QC: ${prevLine.qualityControlStatus} → ${item.qualityControlStatus}`,
+          );
+        }
+        if (
+          item.storeRequestStatus !== undefined &&
+          item.storeRequestStatus !== prevLine.storeRequestStatus
+        ) {
+          changes.push(
+            `Line ${item.id} store: ${prevLine.storeRequestStatus} → ${item.storeRequestStatus}`,
+          );
+        }
+      }
+      if (orderItemsToDelete.length > 0) {
+        changes.push(`${orderItemsToDelete.length} order line(s) removed`);
+      }
+      if (changes.length > 0) {
+        await this.notificationsService.notifyAllActiveUsers({
+          type: 'ORDER',
+          title: `Order ${existingOrder.series} updated`,
+          message: changes.join('\n'),
+          data: {
+            orderId: id,
+            series: existingOrder.series,
+            changes,
+          },
+        });
+      }
 
       // Return the updated order with all relations
       return await this.orderRepository.findOne({

@@ -14,6 +14,7 @@ import {
   isApprovedLabel,
   isPurchaseItemInventoryTransition,
 } from 'src/approvals/approval-authority.util';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 @Injectable()
 export class PurchasesService {
@@ -27,6 +28,7 @@ export class PurchasesService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private readonly permissionsService: PermissionsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createPurchaseDto: CreatePurchaseDto, user: User) {
@@ -85,6 +87,18 @@ export class PurchasesService {
       );
 
       await this.purchaseItemRepository.save(purchaseItems);
+
+      await this.notificationsService.notifyAllActiveUsers({
+        type: 'PURCHASE',
+        title: `Purchase created (${savedPurchase.series})`,
+        message: `Header status: ${purchaseData.status}. ${purchaseItems.length} line(s).`,
+        data: {
+          purchaseId: savedPurchase.id,
+          series: savedPurchase.series,
+          status: purchaseData.status,
+          lineCount: purchaseItems.length,
+        },
+      });
 
       return this.findOne(savedPurchase.id);
 
@@ -305,6 +319,42 @@ export class PurchasesService {
           });
           await this.purchaseItemRepository.save(newItem);
         }
+      }
+
+      const changes: string[] = [];
+      if (
+        purchaseData.status !== undefined &&
+        purchaseData.status !== existingPurchase.status
+      ) {
+        changes.push(
+          `Header status: ${existingPurchase.status} → ${purchaseData.status}`,
+        );
+      }
+      for (const item of purchaseItems) {
+        if (!item.id) {
+          changes.push(`New line (item ${item.itemId}, status ${item.status})`);
+          continue;
+        }
+        const prev = existingPurchase.purchaseItems.find((p) => p.id === item.id);
+        if (!prev) continue;
+        if (item.status !== undefined && item.status !== prev.status) {
+          changes.push(`Line ${item.id} status: ${prev.status} → ${item.status}`);
+        }
+      }
+      if (itemsToDelete.length > 0) {
+        changes.push(`${itemsToDelete.length} line(s) removed`);
+      }
+      if (changes.length > 0) {
+        await this.notificationsService.notifyAllActiveUsers({
+          type: 'PURCHASE',
+          title: `Purchase ${existingPurchase.series} updated`,
+          message: changes.join('\n'),
+          data: {
+            purchaseId: id,
+            series: existingPurchase.series,
+            changes,
+          },
+        });
       }
 
       return this.findOne(id);
