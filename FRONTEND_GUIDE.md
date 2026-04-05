@@ -181,6 +181,7 @@ Requires `ADMIN` role. New password must be at least 6 characters.
 | Production | `PRODUCTION` |
 | Store Keeper | `STORE_KEEPER` |
 | Quality Control | `QUALITY_CONTROL` |
+| Purchaser | `PURCHASER` |
 
 ---
 

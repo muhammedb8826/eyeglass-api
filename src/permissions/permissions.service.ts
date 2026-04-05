@@ -86,6 +86,16 @@ const ROLE_DEFAULTS: Record<Exclude<Role, Role.ADMIN>, PermissionCode[]> = {
     Permissions.ORDER_ITEMS_READ,
     Permissions.QUALITY_CONTROL_WRITE,
   ],
+  [Role.PURCHASER]: [
+    Permissions.PURCHASES_READ,
+    Permissions.PURCHASES_WRITE,
+    Permissions.VENDORS_READ,
+    Permissions.VENDORS_WRITE,
+    Permissions.ITEMS_READ,
+    Permissions.MASTER_READ,
+    Permissions.BOM_READ,
+    Permissions.FILE_WRITE,
+  ],
 };
 
 @Injectable()

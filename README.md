@@ -81,7 +81,7 @@ Send `quantityRight` and/or `quantityLeft` in create/update payloads when you wa
 
 ## User roles (eyeglass lens lab standard)
 
-Roles: `ADMIN`, `FINANCE`, `SALES`, `CASHIER`, `PRODUCTION`, `STORE_KEEPER`, `QUALITY_CONTROL`. See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md#user-roles-eyeglass-lens-lab-standard) and [FRONTEND_EYEGLASS_README.md §8](FRONTEND_EYEGLASS_README.md#8-rbac-roles--user-activationdeactivation).
+Roles: `ADMIN`, `FINANCE`, `SALES`, `CASHIER`, `PRODUCTION`, `STORE_KEEPER`, `QUALITY_CONTROL`, `PURCHASER`. See [FRONTEND_GUIDE.md](FRONTEND_GUIDE.md#user-roles-eyeglass-lens-lab-standard) and [FRONTEND_EYEGLASS_README.md §8](FRONTEND_EYEGLASS_README.md#8-rbac-roles--user-activationdeactivation).
 
 **Roles in the database:** `user.roles` and `role_permissions.role` are stored as `VARCHAR` (not a PostgreSQL enum) so role renames in code do not require fragile enum migrations. On first app start with an **empty** `role_permissions` table, the server seeds default role→permission rows; after that, use **`PUT /permissions/roles/:role`** to change them.
 

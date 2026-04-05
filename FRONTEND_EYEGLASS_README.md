@@ -469,6 +469,7 @@ Users have a single `roles` value (enum):
 - `PRODUCTION` — lab: move lines through **InProgress** / **Ready** (requires `production.write`)
 - `STORE_KEEPER` — stock: sales/store fulfillment, purchases receipt, operator stock, bincard
 - `QUALITY_CONTROL` — set line **qualityControlStatus** (requires `quality_control.write`)
+- `PURCHASER` — procurement: purchase orders, vendors, items/BOM reads for buying (defaults separate from **STORE_KEEPER** receiving)
 
 **Self-signup** (`POST /signup`) assigns role **`CASHIER`** unless an admin changes it.
 
