@@ -14,7 +14,9 @@ import { randomUUID } from 'crypto';
 import { PermissionsService } from 'src/permissions/permissions.service';
 import {
   assertCanManageApprovals,
+  assertCanPerformStoreStockIssue,
   isApprovedLabel,
+  isSaleItemStockIssueTransition,
 } from 'src/approvals/approval-authority.util';
 
 @Injectable()
@@ -39,6 +41,9 @@ export class SalesService {
         user,
         'Store request (sale) create with Approved status',
       );
+    }
+    if (saleItems.some((it) => it.status === 'Stocked-out')) {
+      await assertCanPerformStoreStockIssue(this.permissionsService, user);
     }
 
     try {
@@ -193,6 +198,24 @@ export class SalesService {
 
     // Determine which items need to be deleted (those not in the new items list)
     const itemsToDelete = existingItemIds.filter(id => !newItemIds.includes(id));
+
+    for (const item of saleItems) {
+      if (!item.id && item.status === 'Stocked-out') {
+        await assertCanPerformStoreStockIssue(this.permissionsService, user);
+      }
+      if (item.id && item.status !== undefined) {
+        const prev = existingSale.saleItems.find((si) => si.id === item.id);
+        if (prev && isSaleItemStockIssueTransition(prev.status, item.status)) {
+          await assertCanPerformStoreStockIssue(this.permissionsService, user);
+        }
+      }
+    }
+    for (const delId of itemsToDelete) {
+      const prev = existingSale.saleItems.find((si) => si.id === delId);
+      if (prev?.status === 'Stocked-out') {
+        await assertCanPerformStoreStockIssue(this.permissionsService, user);
+      }
+    }
 
     try {
       const mgr = this.itemRepository.manager;

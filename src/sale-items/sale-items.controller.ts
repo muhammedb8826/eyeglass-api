@@ -45,7 +45,7 @@ export class SaleItemsController {
 
   @Delete(':id')
   @RequirePermissions(Permissions.SALES_WRITE)
-  remove(@Param('id') id: string) {
-    return this.saleItemsService.remove(id);
+  remove(@Param('id') id: string, @Req() req: Request) {
+    return this.saleItemsService.remove(id, req.user as User);
   }
 }

@@ -9,6 +9,12 @@ import {
   applyInventoryDelta,
   assertItemVariantLineFields,
 } from 'src/inventory/item-inventory.util';
+import {
+  assertCanReceivePurchaseIntoStock,
+  isPurchaseItemInventoryTransition,
+} from 'src/approvals/approval-authority.util';
+import { User } from 'src/entities/user.entity';
+import { PermissionsService } from 'src/permissions/permissions.service';
 
 @Injectable()
 export class PurchaseItemsService {
@@ -16,6 +22,7 @@ export class PurchaseItemsService {
     @InjectRepository(PurchaseItems)
     private purchaseItemRepository: Repository<PurchaseItems>,
     private readonly bincardService: BincardService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   private async findDuplicateLine(
@@ -39,7 +46,7 @@ export class PurchaseItemsService {
     return qb.getOne();
   }
 
-  async create(createPurchaseItemDto: CreatePurchaseItemDto) {
+  async create(createPurchaseItemDto: CreatePurchaseItemDto, user: User) {
     try {
       const itemBaseId = createPurchaseItemDto.itemBaseId ?? null;
       await assertItemVariantLineFields(
@@ -57,6 +64,10 @@ export class PurchaseItemsService {
         throw new ConflictException(
           'Duplicate purchase line for this item and variant on the same purchase.',
         );
+      }
+
+      if (createPurchaseItemDto.status === 'Received') {
+        await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
       }
 
       const purchaseItem = this.purchaseItemRepository.create({
@@ -150,7 +161,7 @@ export class PurchaseItemsService {
     return purchaseItems;
   }
 
-  async update(id: string, updatePurchaseItemDto: UpdatePurchaseItemDto) {
+  async update(id: string, updatePurchaseItemDto: UpdatePurchaseItemDto, user: User) {
     return this.purchaseItemRepository.manager.transaction(async (manager) => {
       const purchaseItem = await manager.findOne(PurchaseItems, {
         where: { id },
@@ -196,6 +207,10 @@ export class PurchaseItemsService {
       }
 
       const unit = Number(purchaseItem.unit);
+
+      if (isPurchaseItemInventoryTransition(prevStatus, newStatus)) {
+        await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
+      }
 
       let delta = 0;
       if (prevStatus !== 'Received' && newStatus === 'Received') {
@@ -245,7 +260,7 @@ export class PurchaseItemsService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: User) {
     return this.purchaseItemRepository.manager.transaction(async (manager) => {
       const purchaseItem = await manager.findOne(PurchaseItems, { where: { id } });
       if (!purchaseItem) {
@@ -253,6 +268,7 @@ export class PurchaseItemsService {
       }
 
       if (purchaseItem.status === 'Received') {
+        await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
         const itemBaseId = purchaseItem.itemBaseId ?? null;
         const r = await applyInventoryDelta(
           manager,

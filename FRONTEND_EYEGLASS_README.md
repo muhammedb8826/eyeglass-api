@@ -379,6 +379,7 @@ Status behavior for inventory movement:
 - `Requested`: availability is checked against the selected variant.
 - Transition to `Stocked-out`: stock is reduced (OUT movement).
 - Transition from `Stocked-out` to another status (or deleting a stocked-out line): stock is returned (IN movement).
+- **Who may issue:** moving a line into or out of `Stocked-out`, creating a line already `Stocked-out`, or deleting a `Stocked-out` line requires **`ADMIN`** or permission **`stock_ops.write`** (in addition to **`sales.write`** on `PATCH /sale-items` / `sales`). Plain sales staff can request stock (`Requested`) but should not perform physical issue without that grant.
 
 ### 7.3 Purchases payload requirement
 
@@ -406,7 +407,8 @@ Example purchase item line:
 
 Status behavior for inventory movement:
 
-- Transition to `Received`: stock is increased (IN movement).
+- Transition to `Received`: stock is increased (IN movement). The API does **not** require a particular purchase **header** status; only the line `status` drives receipt (you can align header workflow in the UI separately).
+- **Who may receive into inventory:** any change that **enters or leaves** `Received` (including creating or deleting a received line) also requires **`ADMIN`** or **`stock_ops.write`**, in addition to **`purchases.write`** on the route. That matches **store / stock responsibility** (default **`STORE_KEEPER`** has both; **`PURCHASER`** typically has purchases but not `stock_ops.write`, so they can maintain PO lines but not book goods in).
 - Transition from `Received` to another status (or deleting a received line): stock is reversed (OUT movement).
 
 ### 7.4 Bincard behavior
@@ -509,7 +511,7 @@ Codes used by the API (non-exhaustive; `GET /permissions` returns the full catal
 - `bom.read` / `bom.write`
 - `lab_tool.read` / `lab_tool.write`
 - `finance.read` / `finance.write` — discounts, commissions, commission transactions, payment terms, payment transactions, fixed costs
-- `stock_ops.read` / `stock_ops.write` — operator stock
+- `stock_ops.read` / `stock_ops.write` — **physical stock operations**: operator stock, **store issue** (`sale_items` **`Stocked-out`**, including via `sales` payloads), and **purchase receipt into inventory** (`purchase_items` **`Received`**, including via `purchases` payloads that set or clear that status on lines)
 - `file.write` — `POST /file/upload`
 
 On first database bootstrap, the server seeds the **permission catalog** and a **default role → permission matrix** (you can change non-`ADMIN` roles later via API). **Existing databases** do not automatically re-sync when defaults change in code; adjust roles with **`PUT /permissions/roles/:role`** (or migrate) if you need new codes on a role.

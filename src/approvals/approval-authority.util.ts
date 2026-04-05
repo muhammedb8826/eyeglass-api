@@ -35,3 +35,72 @@ export async function assertCanManageApprovals(
     );
   }
 }
+
+/** True when a store-request line moves into or out of Stocked-out (physical issue / reversal). */
+export function isSaleItemStockIssueTransition(
+  prevStatus: string,
+  nextStatus: string,
+): boolean {
+  return (
+    (prevStatus !== 'Stocked-out' && nextStatus === 'Stocked-out') ||
+    (prevStatus === 'Stocked-out' && nextStatus !== 'Stocked-out')
+  );
+}
+
+/** True when a purchase line moves into or out of Received (stock IN / receipt reversal). */
+export function isPurchaseItemInventoryTransition(
+  prevStatus: string,
+  nextStatus: string,
+): boolean {
+  return (
+    (prevStatus !== 'Received' && nextStatus === 'Received') ||
+    (prevStatus === 'Received' && nextStatus !== 'Received')
+  );
+}
+
+async function assertHasStockOpsWrite(
+  permissionsService: PermissionsService,
+  user: User | null | undefined,
+  ifMissingUser: string,
+  ifDenied: string,
+): Promise<void> {
+  if (!user) {
+    throw new ForbiddenException(ifMissingUser);
+  }
+  if (user.roles === Role.ADMIN) {
+    return;
+  }
+  const ok = await permissionsService.roleHasPermission(
+    user.roles,
+    Permissions.STOCK_OPS_WRITE,
+  );
+  if (!ok) {
+    throw new ForbiddenException(ifDenied);
+  }
+}
+
+/** Store issue from main stock: only ADMIN or stock_ops.write (e.g. store keeper). */
+export async function assertCanPerformStoreStockIssue(
+  permissionsService: PermissionsService,
+  user: User | null | undefined,
+): Promise<void> {
+  await assertHasStockOpsWrite(
+    permissionsService,
+    user,
+    'Sign in is required to issue or reverse store request stock (sale line Stocked-out).',
+    'Only ADMIN or users with stock_ops.write may set or clear Stocked-out on store request lines.',
+  );
+}
+
+/** Receive approved PO lines into inventory (or reverse): only ADMIN or stock_ops.write. */
+export async function assertCanReceivePurchaseIntoStock(
+  permissionsService: PermissionsService,
+  user: User | null | undefined,
+): Promise<void> {
+  await assertHasStockOpsWrite(
+    permissionsService,
+    user,
+    'Sign in is required to receive purchase lines into stock or reverse receipt.',
+    'Only ADMIN or users with stock_ops.write may receive purchase lines into inventory or reverse receipt.',
+  );
+}

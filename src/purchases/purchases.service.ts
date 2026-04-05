@@ -10,7 +10,9 @@ import { User } from '../entities/user.entity';
 import { PermissionsService } from 'src/permissions/permissions.service';
 import {
   assertCanManageApprovals,
+  assertCanReceivePurchaseIntoStock,
   isApprovedLabel,
+  isPurchaseItemInventoryTransition,
 } from 'src/approvals/approval-authority.util';
 
 @Injectable()
@@ -39,6 +41,12 @@ export class PurchasesService {
         user,
         'Purchase create with Approved status',
       );
+    }
+
+    if (
+      createPurchaseDto.purchaseItems.some((it) => it.status === 'Received')
+    ) {
+      await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
     }
 
     try {
@@ -232,6 +240,24 @@ export class PurchasesService {
 
     // Determine which items need to be deleted (those not in the new items list)
     const itemsToDelete = existingItemIds.filter(id => !newItemIds.includes(id));
+
+    for (const item of purchaseItems) {
+      if (!item.id && item.status === 'Received') {
+        await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
+      }
+      if (item.id && item.status !== undefined) {
+        const prev = existingPurchase.purchaseItems.find((p) => p.id === item.id);
+        if (prev && isPurchaseItemInventoryTransition(prev.status, item.status)) {
+          await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
+        }
+      }
+    }
+    for (const delId of itemsToDelete) {
+      const prev = existingPurchase.purchaseItems.find((p) => p.id === delId);
+      if (prev?.status === 'Received') {
+        await assertCanReceivePurchaseIntoStock(this.permissionsService, user);
+      }
+    }
 
     try {
       // Delete items not in the new list

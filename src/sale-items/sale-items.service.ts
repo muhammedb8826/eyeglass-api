@@ -19,7 +19,9 @@ import { User } from 'src/entities/user.entity';
 import { PermissionsService } from 'src/permissions/permissions.service';
 import {
   assertCanManageApprovals,
+  assertCanPerformStoreStockIssue,
   isApprovedLabel,
+  isSaleItemStockIssueTransition,
 } from 'src/approvals/approval-authority.util';
 
 @Injectable()
@@ -40,6 +42,9 @@ export class SaleItemsService {
         user,
         'Store request line create with Approved status',
       );
+    }
+    if (createSaleItemDto.status === 'Stocked-out') {
+      await assertCanPerformStoreStockIssue(this.permissionsService, user);
     }
 
     try {
@@ -119,6 +124,12 @@ export class SaleItemsService {
           user,
           'Store request line approval status',
         );
+      }
+      if (
+        updateSaleItemDto.status !== undefined &&
+        isSaleItemStockIssueTransition(prevStatus, newStatus)
+      ) {
+        await assertCanPerformStoreStockIssue(this.permissionsService, user);
       }
       const newUnit =
         updateSaleItemDto.unit !== undefined
@@ -206,7 +217,7 @@ export class SaleItemsService {
     });
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: User) {
     return this.saleItemRepository.manager.transaction(async (manager) => {
       const saleItem = await manager.findOne(SaleItems, {
         where: { id },
@@ -218,6 +229,7 @@ export class SaleItemsService {
       }
 
       if (saleItem.status === 'Stocked-out') {
+        await assertCanPerformStoreStockIssue(this.permissionsService, user);
         const itemBaseId = saleItem.itemBaseId ?? null;
         const r = await applyInventoryDelta(
           manager,

@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { PurchaseItemsService } from './purchase-items.service';
 import { CreatePurchaseItemDto } from './dto/create-purchase-item.dto';
 import { UpdatePurchaseItemDto } from './dto/update-purchase-item.dto';
 import { RequirePermissions } from 'src/decorators/permissions.decorator';
 import { Permissions } from 'src/permissions/permission.constants';
+import { User } from 'src/entities/user.entity';
 
 @Controller('purchase-items')
 @RequirePermissions(Permissions.PURCHASES_READ)
@@ -12,8 +14,14 @@ export class PurchaseItemsController {
 
   @Post()
   @RequirePermissions(Permissions.PURCHASES_WRITE)
- async create(@Body() createPurchaseItemDto: CreatePurchaseItemDto) {
-    return this.purchaseItemsService.create(createPurchaseItemDto);
+  async create(
+    @Body() createPurchaseItemDto: CreatePurchaseItemDto,
+    @Req() req: Request,
+  ) {
+    return this.purchaseItemsService.create(
+      createPurchaseItemDto,
+      req.user as User,
+    );
   }
 
   @Get('all')
@@ -38,13 +46,21 @@ export class PurchaseItemsController {
 
   @Patch(':id')
   @RequirePermissions(Permissions.PURCHASES_WRITE)
-  async update(@Param('id') id: string, @Body() updatePurchaseItemDto: UpdatePurchaseItemDto) {
-    return this.purchaseItemsService.update(id, updatePurchaseItemDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updatePurchaseItemDto: UpdatePurchaseItemDto,
+    @Req() req: Request,
+  ) {
+    return this.purchaseItemsService.update(
+      id,
+      updatePurchaseItemDto,
+      req.user as User,
+    );
   }
 
   @Delete(':id')
   @RequirePermissions(Permissions.PURCHASES_WRITE)
- async remove(@Param('id') id: string) {
-    return this.purchaseItemsService.remove(id);
+  async remove(@Param('id') id: string, @Req() req: Request) {
+    return this.purchaseItemsService.remove(id, req.user as User);
   }
 }
