@@ -148,6 +148,10 @@ export class OrderItems {
   @Column({ nullable: true })
   description: string;
 
+  /**
+   * Line workflow: Pending → InProgress (production) → Ready (lab done) → SentToShop → ShopReceived → Delivered.
+   * QC fail can rewind to Pending while keeping approvalStatus Approved for a new store request (see order-items service).
+   */
   @Column()
   status: string;
 

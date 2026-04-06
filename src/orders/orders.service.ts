@@ -17,6 +17,7 @@ import { UOM } from 'src/entities/uom.entity';
 import { UnitCategory } from 'src/entities/unit-category.entity';
 import { LabToolService } from 'src/lab-tool/lab-tool.service';
 import { assertWorkflowOnlyOrderItemPayload } from 'src/order-items/order-item-workflow.guard';
+import { assertOrderLineFulfillmentStatusChain } from 'src/order-items/order-item-fulfillment-chain.util';
 import { User } from 'src/entities/user.entity';
 import { PermissionsService } from 'src/permissions/permissions.service';
 import {
@@ -1106,11 +1107,30 @@ export class OrdersService {
         if (item.id) {
           const prevLine = existingOrder.orderItems.find(oi => oi.id === item.id);
           if (prevLine) {
-            const lineInProduction = ['InProgress', 'Ready'].includes(prevLine.status);
+            const lineInProduction = ['InProgress', 'Ready', 'SentToShop', 'ShopReceived'].includes(
+              prevLine.status,
+            );
             const lineApproved = prevLine.approvalStatus === 'Approved';
-            const orderInProduction = ['InProgress', 'Ready'].includes(existingOrder.status);
+            const orderInProduction = ['InProgress', 'Ready', 'SentToShop', 'ShopReceived'].includes(
+              existingOrder.status,
+            );
             if (lineInProduction || lineApproved || orderInProduction) {
               assertWorkflowOnlyOrderItemPayload(item as unknown as Record<string, unknown>, prevLine);
+            }
+            if (
+              item.status !== undefined &&
+              item.status !== prevLine.status
+            ) {
+              const nextQc =
+                item.qualityControlStatus !== undefined
+                  ? item.qualityControlStatus
+                  : prevLine.qualityControlStatus;
+              assertOrderLineFulfillmentStatusChain({
+                previousStatus: prevLine.status,
+                previousQc: prevLine.qualityControlStatus,
+                nextStatus: item.status,
+                nextQc,
+              });
             }
           }
           // Update existing order item

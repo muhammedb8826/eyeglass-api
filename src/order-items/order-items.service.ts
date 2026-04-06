@@ -16,6 +16,7 @@ import {
   assertWorkflowOnlyOrderItemPayload,
   orderItemFieldChanged,
 } from './order-item-workflow.guard';
+import { assertOrderLineFulfillmentStatusChain } from './order-item-fulfillment-chain.util';
 import { assertOrderItemPatchPermissions } from './order-item-patch-policy';
 import { PermissionsService } from 'src/permissions/permissions.service';
 import {
@@ -420,11 +421,13 @@ export class OrderItemsService {
         }
       }
 
-      // Prevent delivering an item unless QC has passed
-      if (nextStatus === 'Delivered' && newQualityControlStatus !== 'Passed') {
-        throw new ConflictException(
-          'Cannot deliver item: quality control must be "Passed" before delivery.',
-        );
+      if (updateOrderItemDto.status !== undefined) {
+        assertOrderLineFulfillmentStatusChain({
+          previousStatus: currentOrderItem.status,
+          previousQc: currentOrderItem.qualityControlStatus,
+          nextStatus,
+          nextQc: newQualityControlStatus,
+        });
       }
 
       // Preserve existing quantities when PATCH does not include quantity fields.
@@ -686,10 +689,12 @@ export class OrderItemsService {
       where: { orderId },
     }));
 
-    // Check if all statuses are the same (eyeglass manufacturing standard)
+    // Check if all statuses are the same (eyeglass manufacturing + retail handoff)
     const allPending = orderItems.every(item => item.status === 'Pending');
     const allInProgress = orderItems.every(item => item.status === 'InProgress');
     const allReady = orderItems.every(item => item.status === 'Ready');
+    const allSentToShop = orderItems.every(item => item.status === 'SentToShop');
+    const allShopReceived = orderItems.every(item => item.status === 'ShopReceived');
     const allDelivered = orderItems.every(item => item.status === 'Delivered');
 
     let newOrderStatus = 'Processing'; // Default when mixed statuses
@@ -700,6 +705,10 @@ export class OrderItemsService {
       newOrderStatus = 'InProgress';
     } else if (allReady) {
       newOrderStatus = 'Ready';
+    } else if (allSentToShop) {
+      newOrderStatus = 'SentToShop';
+    } else if (allShopReceived) {
+      newOrderStatus = 'ShopReceived';
     } else if (allDelivered) {
       newOrderStatus = 'Delivered';
     }

@@ -10,6 +10,17 @@ export function isApprovedLabel(value: string | undefined | null): boolean {
 }
 
 /**
+ * Sale/store-request line: Approved → Stocked-out is normal fulfillment after approval.
+ * Not an approval revocation; `approvals.manage` is not required (stock issue uses stock_ops.write).
+ */
+export function isStoreRequestLineApprovalToStockIssue(
+  prevStatus: string,
+  nextStatus: string,
+): boolean {
+  return isApprovedLabel(prevStatus) && nextStatus === 'Stocked-out';
+}
+
+/**
  * Order / purchase / store-request (sale) approvals: only ADMIN or explicit `approvals.manage`.
  */
 export async function assertCanManageApprovals(

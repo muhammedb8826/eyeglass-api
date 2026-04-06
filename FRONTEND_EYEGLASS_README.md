@@ -145,11 +145,36 @@ These live alongside the existing ordering fields:
 - `itemId`, optional `itemBaseId`, optional `serviceId` / `nonStockServiceId`, `isNonStockService`
 - `pricingId` (optional – resolved from item + itemBase when omitted), `uomId`, `baseUomId`
 - **Quantity (updated – per eye):** Right and left lenses can be produced separately. Send **`quantityRight`** and/or **`quantityLeft`** for per-eye quantities; the backend sets **`quantity`** = `quantityRight + quantityLeft`. If you only send **`quantity`** (legacy), it is treated as right-eye only (`quantityRight = quantity`, `quantityLeft = 0`). Order totals use the total `quantity`.
-- `unitPrice`, `totalAmount`, `discount`, `level`, `status` (eyeglass standard: **Pending** → **InProgress** → **Ready** → **Delivered**; or **Cancelled**), etc.
-- `approvalStatus` – per-line approval (string, e.g. `"Approved"`).
-- `qualityControlStatus` – per-line QC (`"Pending"`, `"Passed"`, `"Failed"`). Delivery requires `"Passed"`. Sending **`"Failed"`** once (when the line was not already failed) **triggers a remake**: **`status: "Pending"`**, **`approvalStatus: "Approved"`**, **`qualityControlStatus: "Pending"`**. Include **`operatorId`** in the same PATCH to also set **`storeRequestStatus: "Requested"`** and **create a new Sale / store request** (each QC fail + `operatorId` = another Sale — e.g. five fails → five requests). Without **`operatorId`**, **`storeRequestStatus`** becomes **`"None"`**; then **`None` → `Requested`** with **`operatorId`** creates the next Sale. Use **order item notes** to record why QC failed.
+- `unitPrice`, `totalAmount`, `discount`, `level`, `status` — see **§4.3.2** for the full line lifecycle (includes retail **SentToShop** / **ShopReceived** before **Delivered**).
+- `approvalStatus` – per-line approval (string, e.g. `"Pending"` → `"Approved"`).
+- `qualityControlStatus` – per-line QC (`"Pending"`, `"Passed"`, `"Failed"`). **SentToShop** and **Delivered** require QC **`"Passed"`**. Sending **`"Failed"`** once (when the line was not already failed) **triggers a remake**: **`status: "Pending"`**, **`approvalStatus` stays `"Approved"`**, **`qualityControlStatus: "Pending"`** — so the line can go through **another store request** without re-approval. Include **`operatorId`** in the same PATCH to also set **`storeRequestStatus: "Requested"`** and **create a new Sale / store request**. Without **`operatorId`**, **`storeRequestStatus`** becomes **`"None"`**; then **`None` → `Requested`** with **`operatorId`** creates the next Sale. Use **order item notes** to record why QC failed.
 - `storeRequestStatus` – per-line store request/issue (`"None"`, `"Requested"`, `"Issued"`). Production (`status = "InProgress"`) is blocked until the store has issued materials and this becomes `"Issued"`.
-- **Editing locked lines:** once `approvalStatus` is `"Approved"`, or the line `status` is `"InProgress"` / `"Ready"`, or the **order** `status` is `"InProgress"` / `"Ready"`, you must not change prescription, lens fields, quantities, pricing, item/base, etc. Only workflow fields are accepted on `PATCH /order-items/:id` (and on nested `orderItems` in `PATCH /orders/:id`): `storeRequestStatus`, `operatorId`, `status`, `qualityControlStatus`, `approvalStatus`, `adminApproval`, `orderId` (unchanged).
+- **Editing locked lines:** once `approvalStatus` is `"Approved"`, or the line `status` is **`InProgress`**, **`Ready`**, **`SentToShop`**, or **`ShopReceived`**, or the **order** `status` is one of those, you must not change prescription, lens fields, quantities, pricing, item/base, etc. Only workflow fields are accepted on `PATCH /order-items/:id` (and on nested `orderItems` in `PATCH /orders/:id`): `storeRequestStatus`, `operatorId`, `status`, `qualityControlStatus`, `approvalStatus`, `adminApproval`, `orderId` (unchanged).
+
+### 4.3.2 Order line lifecycle (recommended)
+
+Use **separate fields** together; they are **not** a single enum.
+
+| Step (your process) | `approvalStatus` | `storeRequestStatus` | `status` (line) | `qualityControlStatus` |
+|---------------------|------------------|----------------------|-----------------|-------------------------|
+| Pending | `Pending` | `None` | `Pending` | `Pending` |
+| Approved | `Approved` | `None` | `Pending` | `Pending` |
+| Request item (store) | `Approved` | `Requested` → **`Issued`** when store stocks out | `Pending` | `Pending` |
+| Start production | `Approved` | `Issued` | **`InProgress`** | `Pending` or in progress |
+| Mark ready (lab done) | `Approved` | `Issued` | **`Ready`** | `Pending` / `Passed` / `Failed` |
+| QC passed / failed | `Approved` | `Issued` | `Ready` (or remake path below) | **`Passed`** or **`Failed`** |
+| Send to shop | `Approved` | `Issued` | **`SentToShop`** | **`Passed`** (required) |
+| Shop received | `Approved` | `Issued` | **`ShopReceived`** | `Passed` |
+| Delivered | `Approved` | `Issued` | **`Delivered`** | **`Passed`** |
+
+**Backend rules**
+
+- **Ready → SentToShop:** only if **`qualityControlStatus === "Passed"`**.
+- **SentToShop → ShopReceived:** only from **`SentToShop`**.
+- **Delivered:** only from **`ShopReceived`**, and QC must be **`Passed`** (same PATCH or already on the line).
+- **QC fail (remake):** set **`qualityControlStatus: "Failed"`** once; backend sets **`status: "Pending"`**, keeps **`approvalStatus: "Approved"`**, resets QC to **`Pending`**. Then request store again (`Requested` + `operatorId`) as above. Line **`status`** must reach **`Ready`** again with QC **`Passed`** before **SentToShop**.
+
+**Order header `status`** (`GET /orders`) mirrors lines when **all** lines share the same `status`: it can be **`SentToShop`** or **`ShopReceived`** as well as **Pending** / **Processing** (mixed) / **InProgress** / **Ready** / **Delivered**.
 
 ### 4.3 Example order item in `orderItems[]`
 
@@ -440,11 +465,13 @@ Bincard entries now optionally include `itemBaseId`:
 - If `itemBaseId` is set, `balanceAfter` represents that variant balance.
 - If `itemBaseId` is null, `balanceAfter` represents parent item balance (legacy/non-variant).
 
+API: `GET /bincard/item/:itemId` and `GET /bincard/:id` include the `itemBase` relation when loaded (use `itemBase.baseCode`, `itemBase.addPower`, etc., when `itemBaseId` is set). Optional query `itemBaseId=<uuid>` limits the list to one variant; `itemBaseId=null` or `itemBaseId=none` limits to parent-level rows only (`itemBaseId` null on the movement).
+
 Frontend recommendation:
 
 - In stock history screens, display both:
   - material (`itemId` / item name)
-  - variant (from `itemBaseId` -> `baseCode` + `addPower`) when available
+  - variant (from `itemBase` or `itemBaseId` → `baseCode` + `addPower`) when available
 
 ### 7.5 Store request from order item
 
@@ -517,7 +544,7 @@ Codes used by the API (non-exhaustive; `GET /permissions` returns the full catal
 
 - `users.manage` — user CRUD, activate/deactivate, reset password
 - `permissions.manage` — view/edit which permissions each role has (`/permissions/matrix`, `PUT /permissions/roles/...`, etc.)
-- `approvals.manage` — set or revoke **Approved** / admin-approval on **orders** (header + lines), **purchase orders** (header + lines when status label is `Approved`), and **store requests** (`sales` / `sale_items` when status label is `Approved`). **`ADMIN`** can always approve without this row. Automated flows (e.g. QC remake auto-setting a line to approved, auto store requests with status `Requested`) do not require it.
+- `approvals.manage` — set or revoke **Approved** / admin-approval on **orders** (header + lines), **purchase orders** (header + lines when status label is `Approved`), and **store requests** (`sales` / `sale_items` when the approval **label** changes). **`ADMIN`** can always approve without this row. **Exception:** moving an already **`Approved`** store line to **`Stocked-out`** (physical issue) is **not** treated as an approval change — use **`stock_ops.write`** (+ **`sales.write`**) only. Automated flows (e.g. QC remake auto-setting a line to approved, auto store requests with status `Requested`) do not require `approvals.manage`.
 - `orders.read` / `orders.write`
 - `order_items.read` / `order_items.write`
 - `production.write` — order line status in the lab (**InProgress**, **Ready**, and related transitions)

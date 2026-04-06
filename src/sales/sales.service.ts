@@ -17,6 +17,7 @@ import {
   assertCanPerformStoreStockIssue,
   isApprovedLabel,
   isSaleItemStockIssueTransition,
+  isStoreRequestLineApprovalToStockIssue,
 } from 'src/approvals/approval-authority.util';
 import { NotificationsService } from 'src/notifications/notifications.service';
 
@@ -188,7 +189,8 @@ export class SalesService {
         const prev = existingSale.saleItems.find((si) => si.id === item.id);
         if (prev && item.status !== undefined) {
           if (
-            isApprovedLabel(item.status) !== isApprovedLabel(prev.status)
+            isApprovedLabel(item.status) !== isApprovedLabel(prev.status) &&
+            !isStoreRequestLineApprovalToStockIssue(prev.status, item.status)
           ) {
             await assertCanManageApprovals(
               this.permissionsService,

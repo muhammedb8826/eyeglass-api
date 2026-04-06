@@ -20,7 +20,12 @@ export function statusChangeNeedsProductionPermission(
     return true;
   }
   if (inLab(previousStatus)) {
-    if (nextStatus === 'Delivered' || nextStatus === 'Pending') {
+    // Lab finished: handoff to shop / retail or QC remake rewind — not production.write
+    if (
+      nextStatus === 'Delivered' ||
+      nextStatus === 'Pending' ||
+      nextStatus === 'SentToShop'
+    ) {
       return false;
     }
     return true;

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Bincard, BincardMovementType, BincardReferenceType } from 'src/entities/bincard.entity';
 
 export interface RecordBincardMovementDto {
@@ -42,10 +42,20 @@ export class BincardService {
     itemId: string,
     skip: number = 0,
     take: number = 50,
+    opts?: { itemBaseId?: string | null },
   ): Promise<{ entries: Bincard[]; total: number }> {
+    const where: { itemId: string; itemBaseId?: string | ReturnType<typeof IsNull> } = {
+      itemId,
+    };
+    if (opts?.itemBaseId === null) {
+      where.itemBaseId = IsNull();
+    } else if (opts?.itemBaseId !== undefined && opts.itemBaseId !== '') {
+      where.itemBaseId = opts.itemBaseId;
+    }
+
     const [entries, total] = await this.bincardRepository.findAndCount({
-      where: { itemId },
-      relations: ['item', 'uom'],
+      where,
+      relations: ['item', 'itemBase', 'uom'],
       order: { createdAt: 'DESC' },
       skip: Number(skip),
       take: Number(take),
@@ -56,7 +66,7 @@ export class BincardService {
   async findOne(id: string): Promise<Bincard> {
     const entry = await this.bincardRepository.findOne({
       where: { id },
-      relations: ['item', 'uom'],
+      relations: ['item', 'itemBase', 'uom'],
     });
     if (!entry) {
       throw new NotFoundException(`Bincard entry with ID ${id} not found`);

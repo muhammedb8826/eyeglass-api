@@ -24,6 +24,7 @@ import {
   assertCanPerformStoreStockIssue,
   isApprovedLabel,
   isSaleItemStockIssueTransition,
+  isStoreRequestLineApprovalToStockIssue,
 } from 'src/approvals/approval-authority.util';
 
 @Injectable()
@@ -144,7 +145,8 @@ export class SaleItemsService {
 
       if (
         updateSaleItemDto.status !== undefined &&
-        isApprovedLabel(newStatus) !== isApprovedLabel(prevStatus)
+        isApprovedLabel(newStatus) !== isApprovedLabel(prevStatus) &&
+        !isStoreRequestLineApprovalToStockIssue(prevStatus, newStatus)
       ) {
         await assertCanManageApprovals(
           this.permissionsService,
